@@ -211,6 +211,7 @@ def _fetch_pack_tab() -> list[dict]:
 
         creator = row_dict.get("Creator", "").strip()
         pack_name = row_dict.get("Title", "").strip()
+        link = row_dict.get("Download", "").strip()
         content = row_dict.get("Content", "").strip()
 
         if not content:
@@ -234,8 +235,8 @@ def _fetch_pack_tab() -> list[dict]:
                 "complete_notes": pack_name,
                 "stream_opt":     0,
                 "origin":         None,
-                "link":           "",
-                "link_host":      "other",
+                "link":           link,
+                "link_host":      detect_link_host(link),
                 "last_seen":      date.today().isoformat(),
             }
             songs.append(song)

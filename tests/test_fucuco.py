@@ -180,12 +180,19 @@ def test_fetch_pack_tab_success():
     assert songs[0]["title"] == "21 Guns"
     assert songs[0]["creator"] == "Blahaszi"
     assert songs[0]["source"] == "fucuco_packs"
+    assert songs[0]["link"] == "Google Drive"
+    assert songs[0]["link_host"] == "other"
     assert songs[0]["complete_notes"] == "Green Day 01"
     assert songs[1]["artist"] == "Green Day"
     assert songs[1]["title"] == "Good Riddance"
+    assert songs[1]["link"] == "Google Drive"
     assert songs[2]["artist"] == "LSD"
     assert songs[2]["title"] == "Audio"
+    assert songs[2]["link"] == "Google Drive"
     assert songs[2]["creator"] == "Heartbreak Rebel"
+    # Links come from the "Download" column — in this test data both packs
+    # have "Google Drive", but real data will have different values per pack
+    assert all(s["link"] == "Google Drive" for s in songs)
 
 def test_fetch_pack_tab_empty_content_skipped():
     """Rows with empty Content should be skipped."""
