@@ -95,19 +95,25 @@ class DetailPanel(ctk.CTkScrollableFrame):
             lbl.configure(text=text)
 
         link = song.get("link", "")
-        has_link = bool(link)
-        self._link_btn.configure(text=(link[:38] + "…") if len(link) > 38 else link)
+        source = song.get("source", "")
+        # Synthetic links (e.g. fucuco_packs://...) are not real download URLs
+        is_synthetic_link = link.startswith("fucuco_packs://") if link else False
+        has_real_link = bool(link) and not is_synthetic_link
+
+        self._link_btn.configure(text=(link[:38] + "…") if len(link) > 38 and not is_synthetic_link else "—")
         self._path_lbl.configure(
             text=f"Installed: {song['pak_path']}" if song.get("pak_path") else "")
 
-        # Show "Browse source sheet" for songs without a direct download link (e.g. packs)
-        source = song.get("source", "")
+        # Show "Browse source sheet" for packs and other linkless songs
         tab_url = get_sheet_tab_url(source)
-        if tab_url and not has_link:
+        if tab_url and is_synthetic_link:
             self._sheet_btn.configure(text=f"Browse {source} sheet")
             self._sheet_btn.grid()
         else:
             self._sheet_btn.grid_remove()
+
+        # Store whether this song has a real download link for button sync
+        self._has_real_link = has_real_link
 
         self._sync_buttons()
 
@@ -135,15 +141,15 @@ class DetailPanel(ctk.CTkScrollableFrame):
             self._un_btn.configure(state="disabled")
             return
         installed = bool(self._song.get("pak_path"))
-        has_link = bool(self._song.get("link", ""))
+        has_real_link = getattr(self, "_has_real_link", False)
         if installed:
             self._dl_btn.configure(state="disabled")
             self._un_btn.configure(state="normal")
-        elif has_link:
+        elif has_real_link:
             self._dl_btn.configure(state="normal")
             self._un_btn.configure(state="disabled")
         else:
-            # Packs or other songs without a link — disable download
+            # Packs or other songs without a real download link
             self._dl_btn.configure(state="disabled")
             self._un_btn.configure(state="disabled")
 

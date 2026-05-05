@@ -211,11 +211,16 @@ def _fetch_pack_tab() -> list[dict]:
 
         creator = row_dict.get("Creator", "").strip()
         pack_name = row_dict.get("Title", "").strip()
-        link = row_dict.get("Download", "").strip()
+        download_label = row_dict.get("Download", "").strip()
         content = row_dict.get("Content", "").strip()
 
         if not content:
             continue
+
+        # Generate a synthetic unique link per pack so the DB's
+        # UNIQUE(source, link) constraint keeps them separate.
+        # The actual download host label is stored in origin.
+        pack_id = f"fucuco_packs://{creator}/{pack_name}"
 
         # Parse each line in Content as Artist - Title
         for artist, title in _split_pack_songs(content):
@@ -234,9 +239,9 @@ def _fetch_pack_tab() -> list[dict]:
                 "complete":       "",
                 "complete_notes": pack_name,
                 "stream_opt":     0,
-                "origin":         None,
-                "link":           link,
-                "link_host":      detect_link_host(link),
+                "origin":         download_label or None,
+                "link":           pack_id,
+                "link_host":      "other",
                 "last_seen":      date.today().isoformat(),
             }
             songs.append(song)
