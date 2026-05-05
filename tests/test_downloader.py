@@ -1,7 +1,8 @@
 import sys
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from downloader import detect_host, find_pak_sig_pairs, DownloadResult
+from downloader import detect_host, find_pak_sig_pairs, DownloadResult, download
 
 def test_detect_host_gdrive_file():
     assert detect_host("https://drive.google.com/file/d/abc123") == "gdrive"
@@ -44,3 +45,34 @@ def test_download_result_fields():
     r = DownloadResult(status="ok", pairs=[], error_msg=None, raw_url="https://x.com")
     assert r.status == "ok"
     assert r.raw_url == "https://x.com"
+
+def test_download_gdrive_error_returns_error(tmp_path):
+    with patch("downloader.STAGING_DIR", tmp_path), \
+         patch("downloader.gdown.download", side_effect=Exception("quota exceeded")):
+        result = download("https://drive.google.com/file/d/abc")
+    assert result.status == "error"
+    assert "quota exceeded" in result.error_msg
+
+def test_download_gdrive_no_pak_returns_manual(tmp_path):
+    def fake_gdown(url, output, **kwargs):
+        # create a non-pak file
+        Path(output).write_text("not a pak")
+    with patch("downloader.STAGING_DIR", tmp_path), \
+         patch("downloader.gdown.download", side_effect=fake_gdown):
+        result = download("https://drive.google.com/file/d/abc")
+    assert result.status == "manual"
+    assert result.error_msg == "No .pak/.sig found in download"
+
+def test_download_non_gdrive_dead_link_returns_error():
+    with patch("downloader.requests.head") as mock_head:
+        mock_head.return_value.status_code = 404
+        result = download("https://1drv.ms/u/abc")
+    assert result.status == "error"
+    assert "404" in result.error_msg
+
+def test_download_non_gdrive_live_returns_manual():
+    with patch("downloader.requests.head") as mock_head:
+        mock_head.return_value.status_code = 200
+        result = download("https://1drv.ms/u/abc")
+    assert result.status == "manual"
+    assert result.error_msg is None

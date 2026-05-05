@@ -16,6 +16,7 @@ class DownloadResult:
     pairs:     list           # [(pak_path: Path, sig_path: Path | None), ...]
     error_msg: str | None
     raw_url:   str
+    work_dir:  Path | None = None   # staging dir to clean up after install (ok only)
 
 
 def detect_host(url: str) -> str:
@@ -42,15 +43,12 @@ def find_pak_sig_pairs(directory: Path) -> list[tuple]:
 
 
 def download(url: str, progress_cb: Callable | None = None) -> DownloadResult:
+    host = detect_host(url)
+    if host != "gdrive":
+        return _non_gdrive(url)
     STAGING_DIR.mkdir(parents=True, exist_ok=True)
     work_dir = Path(tempfile.mkdtemp(dir=STAGING_DIR))
-    host = detect_host(url)
-
-    if host == "gdrive":
-        return _gdrive(url, work_dir)
-
-    # Non-gdrive: check liveness, then return manual prompt
-    return _non_gdrive(url, work_dir)
+    return _gdrive(url, work_dir)
 
 
 def _gdrive(url: str, work_dir: Path) -> DownloadResult:
@@ -70,11 +68,10 @@ def _gdrive(url: str, work_dir: Path) -> DownloadResult:
         return DownloadResult(
             status="manual", pairs=[], error_msg="No .pak/.sig found in download", raw_url=url
         )
-    return DownloadResult(status="ok", pairs=pairs, error_msg=None, raw_url=url)
+    return DownloadResult(status="ok", pairs=pairs, error_msg=None, raw_url=url, work_dir=work_dir)
 
 
-def _non_gdrive(url: str, work_dir: Path) -> DownloadResult:
-    _rm(work_dir)
+def _non_gdrive(url: str) -> DownloadResult:
     try:
         resp = requests.head(url, timeout=10, allow_redirects=True)
         if resp.status_code >= 400:
