@@ -45,22 +45,24 @@ def test_parse_skips_entry_without_link():
 FIXTURE_JSON = {
     "tracks": [
         {
-            "id": "1", "track_title": "Levitating", "track_artist": "Dua Lipa",
-            "has_song_store": "True",
-            "song_store_list": "[{'store-icon': 'fas fa-download', 'store-name': 'Download', 'store-link': 'https://drive.google.com/drive/folders/abc123'}]",
-            "description": "False",
+            "id": 1, "track_title": "Levitating", "track_artist": "Dua Lipa",
+            "has_song_store": True,
+            "song_store_list": [{"store-icon": "fas fa-download", "store-name": "Download",
+                                  "store-link": "https://drive.google.com/drive/folders/abc123"}],
+            "description": False,
         },
         {
-            "id": "2", "track_title": "No Download", "track_artist": "Artist",
-            "has_song_store": "False",
-            "song_store_list": "False",
-            "description": "False",
+            "id": 2, "track_title": "No Download", "track_artist": "Artist",
+            "has_song_store": False,
+            "song_store_list": False,
+            "description": False,
         },
         {
-            "id": "3", "track_title": "Blinding Lights", "track_artist": "The Weeknd",
-            "has_song_store": "True",
-            "song_store_list": "[{'store-name': 'Download', 'store-link': 'https://drive.google.com/drive/folders/def456'}]",
-            "description": "False",
+            "id": 3, "track_title": "Blinding Lights", "track_artist": "The Weeknd",
+            "has_song_store": True,
+            "song_store_list": [{"store-name": "Download",
+                                  "store-link": "https://drive.google.com/drive/folders/def456"}],
+            "description": False,
         },
     ]
 }
@@ -79,6 +81,6 @@ def test_parse_playlist_json_fields():
     assert s["source"] == "fusersoundlab"
 
 def test_parse_playlist_json_skips_no_store_link():
-    data = {"tracks": [{"id": "1", "track_title": "T", "track_artist": "A",
-                         "has_song_store": "True", "song_store_list": "False"}]}
+    data = {"tracks": [{"id": 1, "track_title": "T", "track_artist": "A",
+                         "has_song_store": True, "song_store_list": False}]}
     assert parse_playlist_json(data) == []

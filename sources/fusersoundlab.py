@@ -48,7 +48,9 @@ def parse_playlist_json(data: dict) -> list[dict]:
     """Parse the fusersoundlab playlist JSON API response."""
     songs = []
     for track in data.get("tracks", []):
-        if track.get("has_song_store") != "True":
+        # has_song_store may be boolean True or string "True" depending on API version
+        hs = track.get("has_song_store")
+        if hs is not True and hs != "True":
             continue
         link = _parse_store_link(track.get("song_store_list"))
         if not link:
