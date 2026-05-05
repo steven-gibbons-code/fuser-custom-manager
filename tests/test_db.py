@@ -88,6 +88,8 @@ from db import derive_quality
     ("DLC",          "D", "",          "",           "Official"),
     ("Base Game",    "C", "",          "",           "Official"),
     ("Diamond Shop", "",  "",          "",           "Official"),
+    ("Google Drive",  "D", "",          "",           "Definitive"),  # host label → not Official
+    ("MediaFire",     "C", "Eligible",  "",           "Definitive"),  # host label → not Official
     ("https://drive.google.com/file/d/abc", "D", "", "", "Definitive"),
     ("",             "D", "",          "",           "Definitive"),
     ("",             "C", "Eligible",  "",           "Definitive"),

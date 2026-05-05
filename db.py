@@ -54,9 +54,11 @@ END
 """
 
 
+_OFFICIAL_LABELS = {"dlc", "base game", "diamond shop"}
+
 def derive_quality(song: dict) -> str:
-    dt = (song.get("download_type") or "").strip()
-    if dt and "://" not in dt and not dt.lower().startswith("http"):
+    dt = (song.get("download_type") or "").strip().lower()
+    if dt in _OFFICIAL_LABELS:
         return "Official"
     c     = (song.get("complete")       or "").strip()
     de    = (song.get("de_status")      or "").strip()
@@ -164,8 +166,11 @@ def get_songs(conn: sqlite3.Connection, filters: dict) -> list[dict]:
     if filters.get("de_status"):
         where.append("s.de_status = ?")
         params.append(filters["de_status"])
+    if filters.get("quality"):
+        where.append("s.quality = ?")
+        params.append(filters["quality"])
     if filters.get("definitive_only"):
-        # Use stored quality column so Official songs don't bleed into this filter
+        # Legacy support — kept for backwards compat with existing filter dicts
         where.append("s.quality IN ('Definitive', 'Official')")
     if filters.get("bpm_min") is not None:
         where.append("s.bpm >= ?")

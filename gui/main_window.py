@@ -44,10 +44,6 @@ class FuserApp(ctk.CTk):
         ctk.CTkEntry(top, textvariable=self._search, width=240).grid(
             row=0, column=1, padx=4, sticky="ew")
 
-        self._def_only = ctk.BooleanVar()
-        ctk.CTkCheckBox(top, text="Definitive only", variable=self._def_only,
-                         command=self._refresh_table).grid(row=0, column=2, padx=6)
-
         self._refresh_btn = ctk.CTkButton(top, text="Refresh Sources", width=130,
                                            command=self._start_refresh)
         self._refresh_btn.grid(row=0, column=3, padx=6)
@@ -63,6 +59,12 @@ class FuserApp(ctk.CTk):
         ctk.CTkLabel(fbar, text="Source:").pack(side="left", padx=6)
         self._source = ctk.StringVar(value="All Sources")
         ctk.CTkOptionMenu(fbar, variable=self._source, values=SOURCES, width=130,
+                           command=lambda _: self._refresh_table()).pack(side="left", padx=4)
+
+        QUALITIES = ["All Quality", "Official", "Definitive", "Complete", "Other"]
+        ctk.CTkLabel(fbar, text="Quality:").pack(side="left", padx=(10, 4))
+        self._quality = ctk.StringVar(value="All Quality")
+        ctk.CTkOptionMenu(fbar, variable=self._quality, values=QUALITIES, width=110,
                            command=lambda _: self._refresh_table()).pack(side="left", padx=4)
 
         ctk.CTkLabel(fbar, text="Genre:").pack(side="left", padx=(10, 4))
@@ -97,12 +99,11 @@ class FuserApp(ctk.CTk):
 
     # ── Helpers ───────────────────────────────────────────────────────────
     def _filters(self) -> dict:
-        f: dict = {
-            "search":         self._search.get(),
-            "definitive_only": self._def_only.get(),
-        }
+        f: dict = {"search": self._search.get()}
         if self._source.get() != "All Sources":
             f["source"] = self._source.get()
+        if self._quality.get() != "All Quality":
+            f["quality"] = self._quality.get()
         if self._genre.get():
             f["genre"] = self._genre.get()
         try:
