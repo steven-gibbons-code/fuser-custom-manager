@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS songs (
 
 CREATE TABLE IF NOT EXISTS installed (
     id           INTEGER PRIMARY KEY,
-    song_id      INTEGER REFERENCES songs(id) ON DELETE CASCADE,
+    song_id      INTEGER UNIQUE REFERENCES songs(id) ON DELETE CASCADE,
     pak_path     TEXT NOT NULL,
     sig_path     TEXT,
     installed_at TEXT NOT NULL
@@ -104,7 +104,13 @@ def get_songs(conn: sqlite3.Connection, filters: dict) -> list[dict]:
         where.append("s.bpm <= ?")
         params.append(filters["bpm_max"])
 
+    _ALLOWED_ORDER = {
+        "s.artist", "s.title", "s.creator", "s.bpm", "s.year",
+        "s.genre", "s.key", "s.source", "s.de_status",
+    }
     order = filters.get("order_by", "s.artist")
+    if order not in _ALLOWED_ORDER:
+        order = "s.artist"
     direction = "DESC" if filters.get("descending") else "ASC"
     offset = filters.get("offset", 0)
 
