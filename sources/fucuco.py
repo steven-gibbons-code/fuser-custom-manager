@@ -54,8 +54,8 @@ def _is_ref_error(val: str) -> bool:
 
 def normalise_row(row: dict, source: str) -> dict | None:
     h = list(row.keys())
-    link = row.get(_find(h, "Link") or "", "").strip()
-    if not link or _is_ref_error(link):
+    raw_link = row.get(_find(h, "Link") or "", "").strip()
+    if not raw_link or _is_ref_error(raw_link):
         return None
 
     # "FULL DATABASE Artist" is used in the main tab; "Artist" in others
@@ -66,6 +66,13 @@ def normalise_row(row: dict, source: str) -> dict | None:
 
     if not artist and not title:
         return None
+
+    # Official songs have a label ("DLC", "Base Game") instead of a real URL.
+    # Generate a synthetic unique link so each song gets its own DB record.
+    if "://" not in raw_link and not raw_link.lower().startswith("http"):
+        link = f"official://{source}/{artist}/{title}"
+    else:
+        link = raw_link
 
     # Blank-header columns (DE STATUS=_col0, Complete=_col1) are deduped
     # positionally by fetch_tab when the sheet has no explicit column label
