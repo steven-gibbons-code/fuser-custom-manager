@@ -111,3 +111,42 @@ def test_fetch_tab_without_search_row():
     assert songs[0]["artist"] == "Dua Lipa"
     assert songs[0]["bpm"] == 103
 
+def test_normalise_includes_disc_fields():
+    row = {
+        "Artist": "Daft Punk", "Title": "Get Lucky", "Creator": "DJTest",
+        "Disc 1 ": "Drums", "Disc 2 ": "Vocals", "Disc 3 ": "Sampler", "Disc 4 ": "",
+        "Download": "Google Drive",
+        "Link": "https://drive.google.com/file/d/abc",
+    }
+    r = normalise_row(row, "fucuco_main")
+    assert r["disc1"] == "Drums"
+    assert r["disc2"] == "Vocals"
+    assert r["disc3"] == "Sampler"
+    assert r["disc4"] is None       # blank → None
+
+def test_normalise_download_type_official():
+    row = {
+        "Artist": "Harmonix", "Title": "Base Song", "Creator": "Harmonix",
+        "Download": "Base Game",
+        "Link": "https://drive.google.com/file/d/xyz",
+    }
+    r = normalise_row(row, "fucuco_main")
+    assert r["download_type"] == "Base Game"
+
+def test_normalise_download_type_url_passthrough():
+    row = {
+        "Artist": "A", "Title": "B", "Creator": "C",
+        "Download": "https://drive.google.com/drive/folders/abc",
+        "Link": "https://drive.google.com/file/d/def",
+    }
+    r = normalise_row(row, "fucuco_main")
+    assert r["download_type"] == "https://drive.google.com/drive/folders/abc"
+
+def test_normalise_download_type_missing():
+    row = {
+        "Artist": "A", "Title": "B", "Creator": "C",
+        "Link": "https://drive.google.com/file/d/ghi",
+    }
+    r = normalise_row(row, "fucuco_main")
+    assert r["download_type"] is None
+

@@ -79,6 +79,11 @@ def normalise_row(row: dict, source: str) -> dict | None:
     bpm_col      = _find(h, "BPM", "BPM ")
     key_col      = _find(h, "Form Key", "Key")
     origin_col   = _find(h, "Origin")
+    disc1_col    = _find(h, "Disc 1", "Disc 1 ")
+    disc2_col    = _find(h, "Disc 2", "Disc 2 ")
+    disc3_col    = _find(h, "Disc 3", "Disc 3 ")
+    disc4_col    = _find(h, "Disc 4", "Disc 4 ")
+    download_col = _find(h, "Download")
 
     de_val = row.get(de_col or "", "").strip()
     if _is_ref_error(de_val):
@@ -102,6 +107,11 @@ def normalise_row(row: dict, source: str) -> dict | None:
         "complete_notes": row.get(notes_col  or "", "").strip(),
         "stream_opt":     1 if row.get(stream_col or "", "").strip() == "1" else 0,
         "origin":         row.get(origin_col or "", "").strip() or None,
+        "disc1":          row.get(disc1_col  or "", "").strip() or None,
+        "disc2":          row.get(disc2_col  or "", "").strip() or None,
+        "disc3":          row.get(disc3_col  or "", "").strip() or None,
+        "disc4":          row.get(disc4_col  or "", "").strip() or None,
+        "download_type":  row.get(download_col or "", "").strip() or None,
         "link":           link,
         "link_host":      detect_link_host(link),
         "last_seen":      date.today().isoformat(),
