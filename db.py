@@ -153,3 +153,14 @@ def get_installed_for_song(conn: sqlite3.Connection, song_id: int) -> list[dict]
         "SELECT i.*, s.artist, s.title FROM installed i JOIN songs s ON s.id = i.song_id WHERE i.song_id = ?",
         (song_id,)
     ).fetchall()]
+
+
+def get_song_by_id(conn: sqlite3.Connection, song_id: int) -> dict | None:
+    rows = [dict(r) for r in conn.execute(f"""
+        SELECT s.*, {_IS_DEFINITIVE} AS is_definitive,
+               i.pak_path, i.sig_path, i.installed_at
+        FROM songs s
+        LEFT JOIN installed i ON i.song_id = s.id
+        WHERE s.id = ?
+    """, (song_id,)).fetchall()]
+    return rows[0] if rows else None

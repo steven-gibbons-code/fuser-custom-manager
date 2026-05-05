@@ -57,7 +57,7 @@ def _gdrive(url: str, work_dir: Path) -> DownloadResult:
         if is_folder:
             gdown.download_folder(url, output=str(work_dir), quiet=False, use_cookies=False)
         else:
-            gdown.download(url, str(work_dir / "download"), quiet=False, fuzzy=True)
+            gdown.download(url, str(work_dir) + "/", quiet=False, fuzzy=True)
     except Exception as exc:
         _rm(work_dir)
         return DownloadResult(status="error", pairs=[], error_msg=str(exc), raw_url=url)

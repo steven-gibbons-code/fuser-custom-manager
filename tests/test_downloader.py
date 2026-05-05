@@ -55,8 +55,10 @@ def test_download_gdrive_error_returns_error(tmp_path):
 
 def test_download_gdrive_no_pak_returns_manual(tmp_path):
     def fake_gdown(url, output, **kwargs):
-        # create a non-pak file
-        Path(output).write_text("not a pak")
+        # output is a directory path (trailing slash); create a non-pak file inside it
+        out_dir = Path(output.rstrip("/\\"))
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "readme.txt").write_text("not a pak")
     with patch("downloader.STAGING_DIR", tmp_path), \
          patch("downloader.gdown.download", side_effect=fake_gdown):
         result = download("https://drive.google.com/file/d/abc")

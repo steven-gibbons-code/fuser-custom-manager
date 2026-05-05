@@ -4,7 +4,7 @@ from datetime import date
 
 import customtkinter as ctk
 
-from db import init_db, get_songs, upsert_songs
+from db import init_db, get_songs, upsert_songs, get_song_by_id
 from downloader import download
 from installer import scan_and_sync, install_pairs, uninstall, INSTALL_DIR
 from sources.fucuco import fetch_all as fetch_fucuco
@@ -163,5 +163,4 @@ class FuserApp(ctk.CTk):
     def _on_uninstall(self, song: dict):
         uninstall(song["id"], INSTALL_DIR, self.conn)
         self._refresh_table()
-        updated = get_songs(self.conn, {"search": song["title"]})
-        self.detail_panel.show(updated[0] if updated else {})
+        self.detail_panel.show(get_song_by_id(self.conn, song["id"]) or {})
