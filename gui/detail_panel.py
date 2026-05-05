@@ -15,6 +15,10 @@ _FIELDS = [
     ("complete",      "Complete"),
     ("complete_notes","Notes"),
     ("origin",        "Origin"),
+    ("disc1",         "Disc 1"),
+    ("disc2",         "Disc 2"),
+    ("disc3",         "Disc 3"),
+    ("disc4",         "Disc 4"),
     ("stream_opt",    "Stream-Opt"),
 ]
 
