@@ -71,11 +71,16 @@ def test_get_songs_search_filter(conn):
     assert len(get_songs(conn, {"search": "Nonexistent"})) == 0
 
 def test_get_songs_definitive_only_filter(conn):
-    upsert_songs(conn, [SONG])  # Eligible + C = definitive
+    upsert_songs(conn, [SONG])  # Eligible + C = Definitive quality
     assert len(get_songs(conn, {"definitive_only": True})) == 1
+    # Other-quality song should not appear
     not_def = {**SONG, "title": "Other", "link": "https://drive.google.com/file/d/xyz", "complete": "", "de_status": ""}
     upsert_songs(conn, [not_def])
     assert len(get_songs(conn, {"definitive_only": True})) == 1
+    # Official-quality song should also appear in definitive_only filter
+    official = {**SONG, "title": "Official", "link": "https://drive.google.com/file/d/off", "download_type": "DLC"}
+    upsert_songs(conn, [official])
+    assert len(get_songs(conn, {"definitive_only": True})) == 2
 
 from db import derive_quality
 

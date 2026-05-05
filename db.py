@@ -165,7 +165,8 @@ def get_songs(conn: sqlite3.Connection, filters: dict) -> list[dict]:
         where.append("s.de_status = ?")
         params.append(filters["de_status"])
     if filters.get("definitive_only"):
-        where.append(f"({_IS_DEFINITIVE}) = 1")
+        # Use stored quality column so Official songs don't bleed into this filter
+        where.append("s.quality IN ('Definitive', 'Official')")
     if filters.get("bpm_min") is not None:
         where.append("s.bpm >= ?")
         params.append(filters["bpm_min"])
@@ -175,7 +176,7 @@ def get_songs(conn: sqlite3.Connection, filters: dict) -> list[dict]:
 
     _ALLOWED_ORDER = {
         "s.artist", "s.title", "s.creator", "s.bpm", "s.year",
-        "s.genre", "s.key", "s.source", "s.de_status",
+        "s.genre", "s.key", "s.source", "s.de_status", "s.quality",
     }
     order = filters.get("order_by", "s.artist")
     if order not in _ALLOWED_ORDER:
