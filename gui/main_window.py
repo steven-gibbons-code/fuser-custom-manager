@@ -135,7 +135,9 @@ class FuserApp(ctk.CTk):
                 text=f"Updated {date.today().isoformat()}"))
             self.after(0, self._refresh_table)
         except Exception as exc:
-            self.after(0, lambda: self.status_bar.set_error(str(exc)))
+            import traceback
+            msg = f"{type(exc).__name__}: {exc or traceback.format_exc().splitlines()[-1]}"
+            self.after(0, lambda: self.status_bar.set_error(msg))
         finally:
             self.after(0, lambda: self._refresh_btn.configure(
                 state="normal", text="Refresh Sources"))
