@@ -146,3 +146,10 @@ def get_installed(conn: sqlite3.Connection) -> list[dict]:
     return [dict(r) for r in conn.execute(
         "SELECT i.*, s.artist, s.title FROM installed i JOIN songs s ON s.id = i.song_id"
     ).fetchall()]
+
+
+def get_installed_for_song(conn: sqlite3.Connection, song_id: int) -> list[dict]:
+    return [dict(r) for r in conn.execute(
+        "SELECT i.*, s.artist, s.title FROM installed i JOIN songs s ON s.id = i.song_id WHERE i.song_id = ?",
+        (song_id,)
+    ).fetchall()]
