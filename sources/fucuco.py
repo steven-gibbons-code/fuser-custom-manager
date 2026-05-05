@@ -55,7 +55,8 @@ def normalise_row(row: dict, source: str) -> dict | None:
         return None
 
     new_sub_col = _find(h, "NEW SUBMISSIONS")
-    artist_col  = _find(h, "Artist", "Video Game Music Artist")
+    # "FULL DATABASE Artist" is used in the main tab; "Artist" in others
+    artist_col  = _find(h, "Artist", "Video Game Music Artist", "FULL DATABASE Artist")
     title_col   = _find(h, "Title")
 
     if source == "fucuco_new" and new_sub_col:
@@ -71,8 +72,10 @@ def normalise_row(row: dict, source: str) -> dict | None:
     if not artist and not title:
         return None
 
-    de_col       = _find(h, "DE STATUS")
-    complete_col = _find(h, "Complete")
+    # Blank-header columns (DE STATUS=_col0, Complete=_col1) are deduped
+    # positionally by fetch_tab when the sheet has no explicit column label
+    de_col       = _find(h, "DE STATUS", "_col0")
+    complete_col = _find(h, "Complete",  "_col1")
     notes_col    = _find(h, "Update Fix Notes", "Form Notes", "Notes")
     stream_col   = _find(h, "Stream-optimized")
     creator_col  = _find(h, "Creator", "Author")
@@ -107,8 +110,30 @@ def fetch_tab(tab_name: str, source: str) -> list[dict]:
            f"/gviz/tq?tqx=out:csv&sheet={tab_name.replace(' ', '+')}")
     resp = requests.get(url, timeout=30, allow_redirects=True)
     resp.raise_for_status()
-    reader = csv.DictReader(io.StringIO(resp.text))
-    return [r for row in reader if (r := normalise_row(dict(row), source))]
+
+    raw = list(csv.reader(io.StringIO(resp.text)))
+    if not raw:
+        return []
+
+    # Deduplicate headers: blank or repeated names get a positional key (_col0, _col1, ...)
+    # This preserves DE STATUS (_col0) and Complete (_col1) which have blank labels in
+    # the FULL DATABASE and VGM tabs.
+    seen: set[str] = set()
+    headers: list[str] = []
+    for i, h in enumerate(raw[0]):
+        key = h.strip()
+        if not key or key in seen:
+            key = f"_col{i}"
+        seen.add(key)
+        headers.append(key)
+
+    songs = []
+    for row in raw[1:]:
+        row_dict = dict(zip(headers, row))
+        result = normalise_row(row_dict, source)
+        if result:
+            songs.append(result)
+    return songs
 
 
 def fetch_all() -> list[dict]:
