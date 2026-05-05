@@ -76,3 +76,79 @@ def test_get_songs_definitive_only_filter(conn):
     not_def = {**SONG, "title": "Other", "link": "https://drive.google.com/file/d/xyz", "complete": "", "de_status": ""}
     upsert_songs(conn, [not_def])
     assert len(get_songs(conn, {"definitive_only": True})) == 1
+
+from db import derive_quality
+
+@pytest.mark.parametrize("download_type,complete,de_status,notes,expected", [
+    ("DLC",          "D", "",          "",           "Official"),
+    ("Base Game",    "C", "",          "",           "Official"),
+    ("Diamond Shop", "",  "",          "",           "Official"),
+    ("https://drive.google.com/file/d/abc", "D", "", "", "Definitive"),
+    ("",             "D", "",          "",           "Definitive"),
+    ("",             "C", "Eligible",  "",           "Definitive"),
+    ("",             "C", "",          "",           "Definitive"),
+    ("",             "C", "",          "Wrong notes","Complete"),
+    ("",             "C", "Not eligible", "",        "Complete"),
+    ("",             "",  "",          "",           "Other"),
+    ("",             "",  "Eligible",  "",           "Other"),
+])
+def test_derive_quality(download_type, complete, de_status, notes, expected):
+    song = {
+        "download_type": download_type, "complete": complete,
+        "de_status": de_status, "complete_notes": notes,
+    }
+    assert derive_quality(song) == expected
+
+def test_schema_has_new_columns(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(songs)").fetchall()}
+    for col in ("disc1", "disc2", "disc3", "disc4", "download_type", "quality"):
+        assert col in cols, f"Missing column: {col}"
+
+def test_upsert_sets_quality(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    song = {**SONG, "download_type": "DLC", "disc1": "Drums", "disc2": "Vocals",
+            "disc3": None, "disc4": None}
+    upsert_songs(conn, [song])
+    row = get_songs(conn, {})[0]
+    assert row["quality"] == "Official"
+    assert row["disc1"] == "Drums"
+    assert row["disc2"] == "Vocals"
+
+def test_upsert_quality_definitive(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    song = {**SONG, "download_type": "", "complete": "D"}
+    upsert_songs(conn, [song])
+    assert get_songs(conn, {})[0]["quality"] == "Definitive"
+
+def test_upsert_quality_defaults_for_legacy_song(tmp_path):
+    """upsert_songs handles songs without disc/download_type keys (backwards compat)."""
+    conn = init_db(tmp_path / "test.db")
+    upsert_songs(conn, [SONG])  # SONG has no disc1–4 or download_type
+    row = get_songs(conn, {})[0]
+    assert row["quality"] in ("Official", "Definitive", "Complete", "Other")
+
+def test_migrate_adds_columns_to_existing_schema(tmp_path):
+    """Existing DB without quality/disc columns gets them added non-destructively."""
+    import sqlite3 as _sql
+    old_schema = """
+    CREATE TABLE songs (
+        id INTEGER PRIMARY KEY, source TEXT NOT NULL, artist TEXT, title TEXT,
+        creator TEXT, genre TEXT, year INTEGER, bpm INTEGER, key TEXT,
+        de_status TEXT, complete TEXT, complete_notes TEXT, stream_opt INTEGER DEFAULT 0,
+        origin TEXT, link TEXT, link_host TEXT, last_seen TEXT, UNIQUE(source, link)
+    );
+    CREATE TABLE installed (
+        id INTEGER PRIMARY KEY,
+        song_id INTEGER UNIQUE REFERENCES songs(id) ON DELETE CASCADE,
+        pak_path TEXT NOT NULL, sig_path TEXT, installed_at TEXT NOT NULL
+    );
+    """
+    db_path = tmp_path / "old.db"
+    old = _sql.connect(str(db_path))
+    old.executescript(old_schema)
+    old.close()
+    conn = init_db(db_path)
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(songs)").fetchall()}
+    for col in ("disc1", "disc2", "disc3", "disc4", "download_type", "quality"):
+        assert col in cols

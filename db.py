@@ -24,6 +24,12 @@ CREATE TABLE IF NOT EXISTS songs (
     link           TEXT,
     link_host      TEXT,
     last_seen      TEXT,
+    disc1          TEXT,
+    disc2          TEXT,
+    disc3          TEXT,
+    disc4          TEXT,
+    download_type  TEXT,
+    quality        TEXT,
     UNIQUE(source, link)
 );
 
@@ -48,6 +54,41 @@ END
 """
 
 
+def derive_quality(song: dict) -> str:
+    dt = (song.get("download_type") or "").strip()
+    if dt and "://" not in dt and not dt.lower().startswith("http"):
+        return "Official"
+    c     = (song.get("complete")       or "").strip()
+    de    = (song.get("de_status")      or "").strip()
+    notes = (song.get("complete_notes") or "").strip()
+    is_def = (
+        c == "D"
+        or (de == "Eligible" and c == "C")
+        or (not de and c == "C" and not notes)
+    )
+    if is_def:
+        return "Definitive"
+    if c == "C":
+        return "Complete"
+    return "Other"
+
+
+def _migrate_add_columns(conn: sqlite3.Connection) -> None:
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(songs)").fetchall()}
+    new_cols = [
+        ("disc1",         "TEXT"),
+        ("disc2",         "TEXT"),
+        ("disc3",         "TEXT"),
+        ("disc4",         "TEXT"),
+        ("download_type", "TEXT"),
+        ("quality",       "TEXT"),
+    ]
+    for col_name, col_type in new_cols:
+        if col_name not in existing:
+            conn.execute(f"ALTER TABLE songs ADD COLUMN {col_name} {col_type}")
+    conn.commit()
+
+
 def _needs_migration(conn: sqlite3.Connection) -> bool:
     row = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='songs'"
@@ -63,30 +104,44 @@ def init_db(path: Path = DB_PATH) -> sqlite3.Connection:
     conn = sqlite3.connect(str(path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     if _needs_migration(conn):
-        # Drop tables — catalog is a rebuildable cache; installed paths are
-        # recovered by scan_and_sync on next launch.
         conn.executescript("DROP TABLE IF EXISTS installed; DROP TABLE IF EXISTS songs;")
     conn.executescript(SCHEMA)
+    _migrate_add_columns(conn)
     conn.commit()
     return conn
 
 
 def upsert_songs(conn: sqlite3.Connection, songs: list[dict]) -> None:
+    enriched = []
+    for s in songs:
+        s = dict(s)
+        s.setdefault("disc1", None)
+        s.setdefault("disc2", None)
+        s.setdefault("disc3", None)
+        s.setdefault("disc4", None)
+        s.setdefault("download_type", None)
+        s["quality"] = derive_quality(s)
+        enriched.append(s)
     conn.executemany("""
         INSERT INTO songs (source, artist, title, creator, genre, year, bpm, key,
                            de_status, complete, complete_notes, stream_opt, origin,
-                           link, link_host, last_seen)
+                           link, link_host, last_seen,
+                           disc1, disc2, disc3, disc4, download_type, quality)
         VALUES (:source, :artist, :title, :creator, :genre, :year, :bpm, :key,
                 :de_status, :complete, :complete_notes, :stream_opt, :origin,
-                :link, :link_host, :last_seen)
+                :link, :link_host, :last_seen,
+                :disc1, :disc2, :disc3, :disc4, :download_type, :quality)
         ON CONFLICT(source, link) DO UPDATE SET
             artist=excluded.artist, title=excluded.title,
             creator=excluded.creator, genre=excluded.genre, year=excluded.year,
             bpm=excluded.bpm, key=excluded.key, de_status=excluded.de_status,
             complete=excluded.complete, complete_notes=excluded.complete_notes,
             stream_opt=excluded.stream_opt, origin=excluded.origin,
-            link_host=excluded.link_host, last_seen=excluded.last_seen
-    """, songs)
+            link_host=excluded.link_host, last_seen=excluded.last_seen,
+            disc1=excluded.disc1, disc2=excluded.disc2,
+            disc3=excluded.disc3, disc4=excluded.disc4,
+            download_type=excluded.download_type, quality=excluded.quality
+    """, enriched)
     conn.commit()
 
 
