@@ -1,13 +1,21 @@
+import os
 import shutil
 import tempfile
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
 import gdown
+import patoolib
 import requests
 
 STAGING_DIR = Path.home() / ".fuser_manager" / "staging"
+
+# Archive extensions we can handle
+_ZIP_EXTS = {".zip"}
+_PATOOL_EXTS = {".rar", ".7z", ".tar", ".gz", ".tgz", ".tar.gz", ".bz2", ".tar.bz2", ".xz", ".tar.xz"}
+_ARCHIVE_EXTS = _ZIP_EXTS | _PATOOL_EXTS
 
 
 @dataclass
@@ -42,6 +50,79 @@ def find_pak_sig_pairs(directory: Path) -> list[tuple]:
     return pairs
 
 
+def _extract_archives(work_dir: Path) -> None:
+    """Extract any archive files found in work_dir (recursively).
+
+    Supports .zip (stdlib zipfile), .rar, .7z, .tar.*, and other formats
+    via patool. Nested archives (archives inside archives) are handled
+    by repeated passes until no new archives remain.
+    """
+    MAX_PASSES = 5
+    for _ in range(MAX_PASSES):
+        extracted = False
+        for path in sorted(work_dir.rglob("*")):
+            if not path.is_file():
+                continue
+            suffix = _archive_suffix(path)
+            if suffix is None:
+                continue
+
+            extract_dir = work_dir / path.stem
+            extract_dir.mkdir(parents=True, exist_ok=True)
+
+            try:
+                if suffix in _ZIP_EXTS:
+                    with zipfile.ZipFile(path, "r") as zf:
+                        zf.extractall(str(extract_dir))
+                else:
+                    patoolib.extract_archive(
+                        str(path), outdir=str(extract_dir), verbosity=-1
+                    )
+                # Move extracted contents up to work_dir, then remove the
+                # now-empty extract_dir.
+                _flatten_into(extract_dir, work_dir)
+                shutil.rmtree(extract_dir, ignore_errors=True)
+            except Exception:
+                # If extraction fails, clean up the empty extract dir and
+                # continue — don't let a corrupt archive block the whole pass.
+                shutil.rmtree(extract_dir, ignore_errors=True)
+                continue
+
+            # Remove the original archive file
+            path.unlink(missing_ok=True)
+            extracted = True
+
+        if not extracted:
+            break
+
+
+def _archive_suffix(path: Path) -> str | None:
+    """Return the archive suffix for *path*, or None if it's not an archive."""
+    # Check two-part suffixes first (e.g. .tar.gz) before .gz alone
+    if path.suffixes and len(path.suffixes) >= 2:
+        combined = "".join(s.lower() for s in path.suffixes[-2:])
+        if combined in {".tar.gz", ".tar.bz2", ".tar.xz", ".tgz"}:
+            return combined
+    lower = path.suffix.lower()
+    if lower in _ZIP_EXTS | _PATOOL_EXTS:
+        return lower
+    return None
+
+
+def _flatten_into(src: Path, dst: Path) -> None:
+    """Move all files and dirs from *src* into *dst* (non-recursive, one level)."""
+    for child in src.iterdir():
+        dest = dst / child.name
+        # If a name collision occurs, append a suffix to keep both
+        if dest.exists():
+            stem, ext = child.stem, child.suffix
+            counter = 1
+            while dest.exists():
+                dest = dst / f"{stem}_{counter}{ext}"
+                counter += 1
+        shutil.move(str(child), str(dest))
+
+
 def download(url: str, progress_cb: Callable | None = None) -> DownloadResult:
     host = detect_host(url)
     if host != "gdrive":
@@ -57,12 +138,20 @@ def _gdrive(url: str, work_dir: Path) -> DownloadResult:
         if is_folder:
             gdown.download_folder(url, output=str(work_dir), quiet=False, use_cookies=False)
         else:
-            gdown.download(url, str(work_dir) + "/", quiet=False, fuzzy=True)
+            output_file = gdown.download(url, quiet=False, fuzzy=True)
+            if output_file:
+                src = Path(output_file)
+                shutil.move(str(src), str(work_dir / src.name))
     except Exception as exc:
         _rm(work_dir)
         return DownloadResult(status="error", pairs=[], error_msg=str(exc), raw_url=url)
 
     pairs = find_pak_sig_pairs(work_dir)
+    if not pairs:
+        # No direct .pak/.sig — maybe gdrive returned a compressed archive
+        _extract_archives(work_dir)
+        pairs = find_pak_sig_pairs(work_dir)
+
     if not pairs:
         _rm(work_dir)
         return DownloadResult(
