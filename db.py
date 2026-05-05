@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS songs (
     link           TEXT,
     link_host      TEXT,
     last_seen      TEXT,
-    UNIQUE(source, artist, title)
+    UNIQUE(source, link)
 );
 
 CREATE TABLE IF NOT EXISTS installed (
@@ -48,10 +48,24 @@ END
 """
 
 
+def _needs_migration(conn: sqlite3.Connection) -> bool:
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='songs'"
+    ).fetchone()
+    if not row:
+        return False
+    # Old schema used UNIQUE(source, artist, title); new uses UNIQUE(source, link)
+    return "artist, title" in row[0].lower()
+
+
 def init_db(path: Path = DB_PATH) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    if _needs_migration(conn):
+        # Drop tables — catalog is a rebuildable cache; installed paths are
+        # recovered by scan_and_sync on next launch.
+        conn.executescript("DROP TABLE IF EXISTS installed; DROP TABLE IF EXISTS songs;")
     conn.executescript(SCHEMA)
     conn.commit()
     return conn
@@ -65,13 +79,13 @@ def upsert_songs(conn: sqlite3.Connection, songs: list[dict]) -> None:
         VALUES (:source, :artist, :title, :creator, :genre, :year, :bpm, :key,
                 :de_status, :complete, :complete_notes, :stream_opt, :origin,
                 :link, :link_host, :last_seen)
-        ON CONFLICT(source, artist, title) DO UPDATE SET
+        ON CONFLICT(source, link) DO UPDATE SET
+            artist=excluded.artist, title=excluded.title,
             creator=excluded.creator, genre=excluded.genre, year=excluded.year,
             bpm=excluded.bpm, key=excluded.key, de_status=excluded.de_status,
             complete=excluded.complete, complete_notes=excluded.complete_notes,
             stream_opt=excluded.stream_opt, origin=excluded.origin,
-            link=excluded.link, link_host=excluded.link_host,
-            last_seen=excluded.last_seen
+            link_host=excluded.link_host, last_seen=excluded.last_seen
     """, songs)
     conn.commit()
 

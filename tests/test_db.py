@@ -73,6 +73,6 @@ def test_get_songs_search_filter(conn):
 def test_get_songs_definitive_only_filter(conn):
     upsert_songs(conn, [SONG])  # Eligible + C = definitive
     assert len(get_songs(conn, {"definitive_only": True})) == 1
-    not_def = {**SONG, "title": "Other", "complete": "", "de_status": ""}
+    not_def = {**SONG, "title": "Other", "link": "https://drive.google.com/file/d/xyz", "complete": "", "de_status": ""}
     upsert_songs(conn, [not_def])
     assert len(get_songs(conn, {"definitive_only": True})) == 1
