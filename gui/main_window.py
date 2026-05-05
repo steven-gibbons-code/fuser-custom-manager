@@ -59,7 +59,7 @@ class FuserApp(ctk.CTk):
         fbar = ctk.CTkFrame(self, height=40)
         fbar.grid(row=1, column=0, columnspan=2, sticky="ew", padx=8, pady=(4, 0))
 
-        SOURCES = ["All Sources", "fucuco_main", "fucuco_vgm", "fucuco_packs", "fusersoundlab"]
+        SOURCES = ["All Sources", "fucuco_main", "fucuco_vgm", "fusersoundlab"]
         ctk.CTkLabel(fbar, text="Source:").pack(side="left", padx=6)
         self._source = ctk.StringVar(value="All Sources")
         ctk.CTkOptionMenu(fbar, variable=self._source, values=SOURCES, width=130,

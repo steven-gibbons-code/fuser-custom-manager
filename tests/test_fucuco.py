@@ -4,8 +4,7 @@ from unittest.mock import patch
 import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from sources.fucuco import (
-    normalise_row, detect_link_host, fetch_tab, get_sheet_tab_url, _is_ref_error,
-    _split_pack_songs, _is_pack_header_row, _fetch_pack_tab,
+    normalise_row, detect_link_host, fetch_tab, _is_ref_error,
 )
 
 def test_normalise_full_db_row():
@@ -75,22 +74,6 @@ def test_detect_link_host(url, expected):
     assert detect_link_host(url) == expected
 
 
-# ── Sheet tab URL helper ────────────────────────────────────────────────
-
-def test_get_sheet_tab_url_known_source():
-    url = get_sheet_tab_url("fucuco_main")
-    assert url is not None
-    assert "FULL+DATABASE" in url
-
-def test_get_sheet_tab_url_new_submissions():
-    url = get_sheet_tab_url("fucuco_new")
-    assert url is not None
-    assert "NEW+SUBMISSIONS" in url
-
-def test_get_sheet_tab_url_unknown_source():
-    assert get_sheet_tab_url("nonexistent") is None
-
-
 # ── Standard tab: search-row detection ──────────────────────────────────
 
 CSV_WITH_SEARCH_ROW = """\
@@ -128,91 +111,3 @@ def test_fetch_tab_without_search_row():
     assert songs[0]["artist"] == "Dua Lipa"
     assert songs[0]["bpm"] == 103
 
-
-# ── Pack tab: header detection and content parsing ─────────────────────
-
-def test_is_pack_header_row_positive():
-    row = ["Creator", "Title", "N°", "V", "Download", "Date", "Content"]
-    assert _is_pack_header_row(row) is True
-
-def test_is_pack_header_row_negative():
-    row = ["", "SEARCH", "", "", "", ""]
-    assert _is_pack_header_row(row) is False
-
-def test_is_pack_header_row_partial():
-    row = ["Creator", "Title", "Something", "", "Download"]
-    assert _is_pack_header_row(row) is True
-
-def test_split_pack_songs_dash():
-    content = "Dua Lipa - Levitating\nThe Weeknd – Blinding Lights\nArtist — Title"
-    songs = _split_pack_songs(content)
-    assert len(songs) == 3
-    assert songs[0] == ("Dua Lipa", "Levitating")
-    assert songs[1] == ("The Weeknd", "Blinding Lights")
-    assert songs[2] == ("Artist", "Title")
-
-def test_split_pack_songs_no_dash():
-    content = "Just a Title"
-    songs = _split_pack_songs(content)
-    assert len(songs) == 1
-    assert songs[0] == ("", "Just a Title")
-
-def test_split_pack_songs_empty():
-    assert _split_pack_songs("") == []
-    assert _split_pack_songs("  \n  ") == []
-
-def test_fetch_pack_tab_success():
-    """End-to-end: mock export CSV, verify songs are parsed from Content."""
-    csv_data = (
-        "Notes row, with some text,,,,,Highlights\r\n"
-        "Creator,Title,N°,V,Download,Date,Content\r\n"
-        'Blahaszi,Green Day 01,3,V1,Google Drive,2023/05/22,"Green Day - 21 Guns\r\n'
-        'Green Day - Good Riddance"\r\n'
-        'Heartbreak Rebel,LSD Pack,8,V1,Google Drive,2023/10/08,"LSD - Audio\r\n'
-        'LSD - Genius"\r\n'
-    )
-    with patch("sources.fucuco.requests.get") as mock_get:
-        mock_get.return_value.status_code = 200
-        mock_get.return_value.text = csv_data
-        songs = _fetch_pack_tab()
-    assert len(songs) == 4
-    assert songs[0]["artist"] == "Green Day"
-    assert songs[0]["title"] == "21 Guns"
-    assert songs[0]["creator"] == "Blahaszi"
-    assert songs[0]["source"] == "fucuco_packs"
-    assert songs[0]["link"] == "fucuco_packs://Blahaszi/Green Day 01"
-    assert songs[0]["link_host"] == "other"
-    assert songs[0]["origin"] == "Google Drive"
-    assert songs[0]["complete_notes"] == "Green Day 01"
-    assert songs[1]["artist"] == "Green Day"
-    assert songs[1]["title"] == "Good Riddance"
-    assert songs[1]["link"] == "fucuco_packs://Blahaszi/Green Day 01"
-    assert songs[2]["artist"] == "LSD"
-    assert songs[2]["title"] == "Audio"
-    assert songs[2]["link"] == "fucuco_packs://Heartbreak Rebel/LSD Pack"
-    assert songs[2]["origin"] == "Google Drive"
-    assert songs[2]["creator"] == "Heartbreak Rebel"
-    # All pack songs have unique links (per-pack synthetic URI)
-    links = {s["link"] for s in songs}
-    assert len(links) == 2  # one per pack
-
-def test_fetch_pack_tab_empty_content_skipped():
-    """Rows with empty Content should be skipped."""
-    csv_data = """\
-Creator,Title,N°,V,Download,Date,Content
-SomeCreator,Some Pack,2,V1,Google Drive,2024/01/01,
-AnotherCreator,Another Pack,1,V1,,,
-"""
-    with patch("sources.fucuco.requests.get") as mock_get:
-        mock_get.return_value.status_code = 200
-        mock_get.return_value.text = csv_data
-        songs = _fetch_pack_tab()
-    assert len(songs) == 0
-
-def test_fetch_pack_tab_no_header():
-    """No header row found -> empty result."""
-    with patch("sources.fucuco.requests.get") as mock_get:
-        mock_get.return_value.status_code = 200
-        mock_get.return_value.text = "nothing useful here"
-        songs = _fetch_pack_tab()
-    assert len(songs) == 0

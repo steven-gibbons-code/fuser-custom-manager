@@ -6,32 +6,10 @@ from datetime import date
 import requests
 
 SHEET_ID = "1LdMeksBBV8YHo1rfgEWAfegEyRIhcGUjv96RNd10YKk"
-SHEET_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID
-
 TABS = [
     ("FULL DATABASE",   "fucuco_main"),
     ("VGM",             "fucuco_vgm"),
-    ("PACKS",           "fucuco_packs"),
 ]
-
-# Map source to a human label and the sheet tab gid/name for linking
-SOURCE_SHEET_TABS = {
-    "fucuco_main":   "FULL DATABASE",
-    "fucuco_vgm":    "VGM",
-    "fucuco_packs":  "PACKS",
-    "fucuco_new":    "NEW SUBMISSIONS",
-}
-
-
-def get_sheet_tab_url(source: str) -> str | None:
-    """Return a URL to the specific sheet tab for a given source.
-
-    Returns None if the source has no associated sheet tab.
-    """
-    tab = SOURCE_SHEET_TABS.get(source)
-    if tab:
-        return f"{SHEET_URL}/gid=0#gid=0&sheet={tab.replace(' ', '+')}"
-    return None
 
 
 def detect_link_host(url: str) -> str:
@@ -130,128 +108,6 @@ def normalise_row(row: dict, source: str) -> dict | None:
     }
 
 
-# ── PACKS tab (pack-based format via export API) ────────────────────
-
-# The PACKS tab has a completely different layout from the main tabs & VGM.
-# It is a pack-submission tracker with these columns:
-#   Creator | Title (pack name) | N° | V | Download (host) | Date | Content
-#
-# The Content column contains newline-separated entries like "Artist - Title".
-# We parse each Content line as a separate song.
-# Because the gviz API returns broken data for this tab when accessed by name,
-# we use the export API instead.
-
-_PACK_HEADER_KEYWORDS = {"creator", "title", "download", "content", "date"}
-
-
-def _is_pack_header_row(row: list[str]) -> bool:
-    """Detect if a row looks like a PACKS tab header row."""
-    lower = [c.lower().strip() for c in row if c]
-    matches = sum(1 for l in lower if l in _PACK_HEADER_KEYWORDS)
-    return matches >= 3
-
-
-_SONG_ARTIST_TITLE_RE = re.compile(r"^(?P<artist>.+?)\s*[-–—]\s*(?P<title>.+)$")
-
-
-def _split_pack_songs(content: str) -> list[tuple[str, str]]:
-    """Parse newline-separated content into (artist, title) pairs.
-
-    Supports:
-      "Artist - Title"          standard dash separator
-      "Artist – Title"          en-dash separator
-      "Artist — Title"          em-dash separator
-      "Title" (no dash)         fallback: artist empty, title is the line
-    """
-    songs = []
-    for line in content.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        m = _SONG_ARTIST_TITLE_RE.match(line)
-        if m:
-            songs.append((m.group("artist").strip(), m.group("title").strip()))
-        else:
-            songs.append(("", line))
-    return songs
-
-
-def _fetch_pack_tab() -> list[dict]:
-    """Fetch and parse the PACKS tab.
-
-    Uses the export API (which returns all rows) instead of gviz (which
-    returns broken data for this tab when accessed by name).
-    """
-    url = (f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
-           f"/export?format=csv&sheet=PACKS")
-    resp = requests.get(url, timeout=30, allow_redirects=True)
-    resp.raise_for_status()
-
-    raw = list(csv.reader(io.StringIO(resp.text)))
-    if not raw:
-        return []
-
-    # Find the header row (looks for: Creator, Title, Download, Content, etc.)
-    header_idx = None
-    for i, row in enumerate(raw):
-        if _is_pack_header_row(row):
-            header_idx = i
-            break
-    if header_idx is None:
-        return []
-
-    headers = [h.strip() for h in raw[header_idx]]
-    songs = []
-
-    for row in raw[header_idx + 1:]:
-        # Skip blank rows
-        if not any(c.strip() for c in row):
-            continue
-        row_dict = dict(zip(headers, row))
-
-        creator = row_dict.get("Creator", "").strip()
-        pack_name = row_dict.get("Title", "").strip()
-        download_label = row_dict.get("Download", "").strip()
-        content = row_dict.get("Content", "").strip()
-
-        if not content:
-            continue
-
-        # Generate a synthetic unique link per pack so the DB's
-        # UNIQUE(source, link) constraint keeps them separate.
-        # The actual download host label is stored in origin.
-        pack_id = f"fucuco_packs://{creator}/{pack_name}"
-
-        # Parse each line in Content as Artist - Title
-        for artist, title in _split_pack_songs(content):
-            if not title:
-                continue
-            song = {
-                "source":         "fucuco_packs",
-                "artist":         artist or creator,
-                "title":          title,
-                "creator":        creator,
-                "genre":          "",
-                "year":           None,
-                "bpm":            None,
-                "key":            "",
-                "de_status":      "",
-                "complete":       "",
-                "complete_notes": pack_name,
-                "stream_opt":     0,
-                "origin":         download_label or None,
-                "link":           pack_id,
-                "link_host":      "other",
-                "last_seen":      date.today().isoformat(),
-            }
-            songs.append(song)
-
-    return songs
-
-
-# ── Standard tab fetcher (FULL DATABASE / VGM) ──────────────────────
-
-
 def fetch_tab(tab_name: str, source: str) -> list[dict]:
     url = (f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
            f"/gviz/tq?tqx=out:csv&sheet={tab_name.replace(' ', '+')}")
@@ -301,8 +157,5 @@ def fetch_tab(tab_name: str, source: str) -> list[dict]:
 def fetch_all() -> list[dict]:
     songs = []
     for tab_name, source in TABS:
-        if source == "fucuco_packs":
-            songs.extend(_fetch_pack_tab())
-        else:
-            songs.extend(fetch_tab(tab_name, source))
+        songs.extend(fetch_tab(tab_name, source))
     return songs

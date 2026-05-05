@@ -2,8 +2,6 @@ import webbrowser
 import sqlite3
 import customtkinter as ctk
 
-from sources.fucuco import get_sheet_tab_url, SHEET_URL
-
 _FIELDS = [
     ("artist",        "Artist"),
     ("title",         "Title"),
@@ -70,15 +68,6 @@ class DetailPanel(ctk.CTkScrollableFrame):
         self._manual_lbl.grid(row=base + 4, column=0, columnspan=2,
                                sticky="w", padx=10, pady=(4, 0))
 
-        # Source sheet link — for packs, new submissions, or browsing the catalog
-        self._sheet_btn = ctk.CTkButton(
-            self, text="Browse source sheet", anchor="w",
-            fg_color="transparent", text_color="#6ab0f5",
-            command=self._open_source_sheet)
-        self._sheet_btn.grid(row=base + 5, column=0, columnspan=2,
-                              sticky="w", padx=10, pady=(4, 0))
-        self._sheet_btn.grid_remove()  # hidden by default
-
         self._sync_buttons()
 
     def show(self, song: dict):
@@ -95,45 +84,14 @@ class DetailPanel(ctk.CTkScrollableFrame):
             lbl.configure(text=text)
 
         link = song.get("link", "")
-        source = song.get("source", "")
-        # Synthetic links (e.g. fucuco_packs://...) are not real download URLs
-        is_synthetic_link = link.startswith("fucuco_packs://") if link else False
-        has_real_link = bool(link) and not is_synthetic_link
-
-        self._link_btn.configure(text=(link[:38] + "…") if len(link) > 38 and not is_synthetic_link else "—")
+        self._link_btn.configure(text=(link[:38] + "…") if len(link) > 38 else link or "—")
         self._path_lbl.configure(
             text=f"Installed: {song['pak_path']}" if song.get("pak_path") else "")
-
-        # Show "Browse source sheet" for packs and other linkless songs
-        tab_url = get_sheet_tab_url(source)
-        if tab_url and is_synthetic_link:
-            self._sheet_btn.configure(text=f"Browse {source} sheet")
-            self._sheet_btn.grid()
-        else:
-            self._sheet_btn.grid_remove()
-
-        # Store whether this song has a real download link for button sync
-        self._has_real_link = has_real_link
-
         self._sync_buttons()
 
     def show_manual_link(self, url: str):
         self._manual_lbl.configure(
             text="Manual download required.\nClick the link above to open in browser.")
-
-    def show_no_song_found(self, search_text: str = ""):
-        """Show a message when no song is selected / search is empty."""
-        self._song = None
-        for lbl in self._value_labels.values():
-            lbl.configure(text="—")
-        self._link_btn.configure(text="—")
-        self._path_lbl.configure(text="")
-        self._manual_lbl.configure(text="")
-        self._sheet_btn.configure(
-            text="Browse NEW SUBMISSIONS sheet (latest additions)",
-            command=lambda: webbrowser.open(f"{SHEET_URL}#gid=0"))
-        self._sheet_btn.grid()
-        self._sync_buttons()
 
     def _sync_buttons(self):
         if not self._song:
@@ -141,30 +99,14 @@ class DetailPanel(ctk.CTkScrollableFrame):
             self._un_btn.configure(state="disabled")
             return
         installed = bool(self._song.get("pak_path"))
-        has_real_link = getattr(self, "_has_real_link", False)
-        if installed:
-            self._dl_btn.configure(state="disabled")
-            self._un_btn.configure(state="normal")
-        elif has_real_link:
-            self._dl_btn.configure(state="normal")
-            self._un_btn.configure(state="disabled")
-        else:
-            # Packs or other songs without a real download link
-            self._dl_btn.configure(state="disabled")
-            self._un_btn.configure(state="disabled")
+        self._dl_btn.configure(state="disabled" if installed else "normal")
+        self._un_btn.configure(state="normal" if installed else "disabled")
 
     def _open_link(self):
         if self._song:
             link = self._song.get("link", "")
             if link:
                 webbrowser.open(link)
-
-    def _open_source_sheet(self):
-        if self._song:
-            source = self._song.get("source", "")
-            url = get_sheet_tab_url(source)
-            if url:
-                webbrowser.open(url)
 
     def _download(self):
         if self._song and self._on_download:
