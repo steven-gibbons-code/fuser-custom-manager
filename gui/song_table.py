@@ -1,17 +1,19 @@
 import customtkinter as ctk
 from tkinter import ttk
 
+_QUALITY_ABBR = {"Official": "Off", "Definitive": "Def", "Complete": "Cmp"}
+
 COLUMNS = [
-    ("status",     "Status",     55),
-    ("artist",     "Artist",     160),
-    ("title",      "Title",      200),
-    ("creator",    "Creator",    120),
-    ("bpm",        "BPM",        50),
-    ("key",        "Key",        90),
-    ("genre",      "Genre",      100),
-    ("year",       "Year",       50),
-    ("source",     "Source",     95),
-    ("definitive", "Definitive", 75),
+    ("status",  "Status",  55),
+    ("quality", "Quality", 45),
+    ("artist",  "Artist",  160),
+    ("title",   "Title",   200),
+    ("creator", "Creator", 120),
+    ("bpm",     "BPM",     50),
+    ("key",     "Key",     90),
+    ("genre",   "Genre",   100),
+    ("year",    "Year",    50),
+    ("source",  "Source",  95),
 ]
 
 
@@ -57,6 +59,7 @@ class SongTable(ctk.CTkFrame):
         for r in rows:
             values = (
                 "✓" if r.get("pak_path") else "",
+                _QUALITY_ABBR.get(r.get("quality", ""), ""),
                 r.get("artist", ""),
                 r.get("title", ""),
                 r.get("creator", ""),
@@ -65,7 +68,6 @@ class SongTable(ctk.CTkFrame):
                 r.get("genre", ""),
                 r.get("year", ""),
                 r.get("source", ""),
-                "★" if r.get("is_definitive") else "",
             )
             tag = "installed" if r.get("pak_path") else ""
             self._tree.insert("", "end", iid=str(r["id"]), values=values, tags=(tag,))
