@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS songs (
     disc4          TEXT,
     download_type  TEXT,
     quality        TEXT,
+    submit_date    TEXT,
     UNIQUE(source, link)
 );
 
@@ -75,6 +76,42 @@ def derive_quality(song: dict) -> str:
     return "Other"
 
 
+def _build_where_params(filters: dict) -> tuple[list[str], list]:
+    where, params = ["1=1"], []
+    if filters.get("search"):
+        where.append("(s.artist LIKE ? OR s.title LIKE ? OR s.creator LIKE ?)")
+        t = f"%{filters['search']}%"
+        params += [t, t, t]
+    if filters.get("source"):
+        where.append("s.source = ?")
+        params.append(filters["source"])
+    if filters.get("genre"):
+        where.append("s.genre LIKE ?")
+        params.append(f"%{filters['genre']}%")
+    if filters.get("key"):
+        where.append("s.key = ?")
+        params.append(filters["key"])
+    if filters.get("de_status"):
+        where.append("s.de_status = ?")
+        params.append(filters["de_status"])
+    if filters.get("quality"):
+        where.append("s.quality = ?")
+        params.append(filters["quality"])
+    if filters.get("definitive_only"):
+        where.append("s.quality IN ('Definitive', 'Official')")
+    if filters.get("bpm_min") is not None:
+        where.append("s.bpm >= ?")
+        params.append(filters["bpm_min"])
+    if filters.get("bpm_max") is not None:
+        where.append("s.bpm <= ?")
+        params.append(filters["bpm_max"])
+    if filters.get("installed") == "installed":
+        where.append("i.pak_path IS NOT NULL")
+    elif filters.get("installed") == "not_installed":
+        where.append("i.pak_path IS NULL")
+    return where, params
+
+
 def _migrate_add_columns(conn: sqlite3.Connection) -> None:
     existing = {row[1] for row in conn.execute("PRAGMA table_info(songs)").fetchall()}
     new_cols = [
@@ -84,6 +121,7 @@ def _migrate_add_columns(conn: sqlite3.Connection) -> None:
         ("disc4",         "TEXT"),
         ("download_type", "TEXT"),
         ("quality",       "TEXT"),
+        ("submit_date",   "TEXT"),
     ]
     for col_name, col_type in new_cols:
         if col_name not in existing:
@@ -122,17 +160,18 @@ def upsert_songs(conn: sqlite3.Connection, songs: list[dict]) -> None:
         s.setdefault("disc3", None)
         s.setdefault("disc4", None)
         s.setdefault("download_type", None)
+        s.setdefault("submit_date", None)
         s["quality"] = derive_quality(s)
         enriched.append(s)
     conn.executemany("""
         INSERT INTO songs (source, artist, title, creator, genre, year, bpm, key,
                            de_status, complete, complete_notes, stream_opt, origin,
                            link, link_host, last_seen,
-                           disc1, disc2, disc3, disc4, download_type, quality)
+                           disc1, disc2, disc3, disc4, download_type, quality, submit_date)
         VALUES (:source, :artist, :title, :creator, :genre, :year, :bpm, :key,
                 :de_status, :complete, :complete_notes, :stream_opt, :origin,
                 :link, :link_host, :last_seen,
-                :disc1, :disc2, :disc3, :disc4, :download_type, :quality)
+                :disc1, :disc2, :disc3, :disc4, :download_type, :quality, :submit_date)
         ON CONFLICT(source, link) DO UPDATE SET
             artist=excluded.artist, title=excluded.title,
             creator=excluded.creator, genre=excluded.genre, year=excluded.year,
@@ -142,46 +181,19 @@ def upsert_songs(conn: sqlite3.Connection, songs: list[dict]) -> None:
             link_host=excluded.link_host, last_seen=excluded.last_seen,
             disc1=excluded.disc1, disc2=excluded.disc2,
             disc3=excluded.disc3, disc4=excluded.disc4,
-            download_type=excluded.download_type, quality=excluded.quality
+            download_type=excluded.download_type, quality=excluded.quality,
+            submit_date=excluded.submit_date
     """, enriched)
     conn.commit()
 
 
 def get_songs(conn: sqlite3.Connection, filters: dict) -> list[dict]:
-    where, params = ["1=1"], []
-
-    if filters.get("search"):
-        where.append("(s.artist LIKE ? OR s.title LIKE ? OR s.creator LIKE ?)")
-        t = f"%{filters['search']}%"
-        params += [t, t, t]
-    if filters.get("source"):
-        where.append("s.source = ?")
-        params.append(filters["source"])
-    if filters.get("genre"):
-        where.append("s.genre LIKE ?")
-        params.append(f"%{filters['genre']}%")
-    if filters.get("key"):
-        where.append("s.key = ?")
-        params.append(filters["key"])
-    if filters.get("de_status"):
-        where.append("s.de_status = ?")
-        params.append(filters["de_status"])
-    if filters.get("quality"):
-        where.append("s.quality = ?")
-        params.append(filters["quality"])
-    if filters.get("definitive_only"):
-        # Legacy support — kept for backwards compat with existing filter dicts
-        where.append("s.quality IN ('Definitive', 'Official')")
-    if filters.get("bpm_min") is not None:
-        where.append("s.bpm >= ?")
-        params.append(filters["bpm_min"])
-    if filters.get("bpm_max") is not None:
-        where.append("s.bpm <= ?")
-        params.append(filters["bpm_max"])
+    where, params = _build_where_params(filters)
 
     _ALLOWED_ORDER = {
         "s.artist", "s.title", "s.creator", "s.bpm", "s.year",
         "s.genre", "s.key", "s.source", "s.de_status", "s.quality",
+        "s.submit_date",
     }
     order = filters.get("order_by", "s.artist")
     if order not in _ALLOWED_ORDER:
@@ -200,6 +212,16 @@ def get_songs(conn: sqlite3.Connection, filters: dict) -> list[dict]:
     """
     params.append(offset)
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def count_songs(conn: sqlite3.Connection, filters: dict) -> int:
+    where, params = _build_where_params(filters)
+    sql = f"""
+        SELECT COUNT(*) FROM songs s
+        LEFT JOIN installed i ON i.song_id = s.id
+        WHERE {' AND '.join(where)}
+    """
+    return conn.execute(sql, params).fetchone()[0]
 
 
 def mark_installed(conn: sqlite3.Connection, song_id: int,

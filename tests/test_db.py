@@ -159,3 +159,58 @@ def test_migrate_adds_columns_to_existing_schema(tmp_path):
     cols = {row[1] for row in conn.execute("PRAGMA table_info(songs)").fetchall()}
     for col in ("disc1", "disc2", "disc3", "disc4", "download_type", "quality"):
         assert col in cols
+
+from db import count_songs
+
+def test_count_songs_total(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    upsert_songs(conn, [SONG])
+    assert count_songs(conn, {}) == 1
+
+def test_count_songs_search_filter(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    upsert_songs(conn, [SONG])
+    assert count_songs(conn, {"search": "Daft"}) == 1
+    assert count_songs(conn, {"search": "Nonexistent"}) == 0
+
+def test_count_songs_installed_filter(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    upsert_songs(conn, [SONG])
+    song = get_songs(conn, {})[0]
+    assert count_songs(conn, {"installed": "installed"}) == 0
+    assert count_songs(conn, {"installed": "not_installed"}) == 1
+    mark_installed(conn, song["id"], r"C:\path\song.pak", r"C:\path\song.sig")
+    assert count_songs(conn, {"installed": "installed"}) == 1
+    assert count_songs(conn, {"installed": "not_installed"}) == 0
+
+def test_get_songs_installed_filter(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    upsert_songs(conn, [SONG])
+    song = get_songs(conn, {})[0]
+    assert len(get_songs(conn, {"installed": "not_installed"})) == 1
+    assert len(get_songs(conn, {"installed": "installed"})) == 0
+    mark_installed(conn, song["id"], r"C:\path\song.pak", r"C:\path\song.sig")
+    assert len(get_songs(conn, {"installed": "installed"})) == 1
+    assert len(get_songs(conn, {"installed": "not_installed"})) == 0
+
+def test_schema_has_submit_date(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(songs)").fetchall()}
+    assert "submit_date" in cols
+
+def test_upsert_stores_submit_date(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    song = {**SONG, "submit_date": "2024/05/01"}
+    upsert_songs(conn, [song])
+    row = get_songs(conn, {})[0]
+    assert row["submit_date"] == "2024/05/01"
+
+def test_get_songs_order_by_submit_date(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    older = {**SONG, "submit_date": "2023/01/01"}
+    newer = {**SONG, "title": "Newer Song",
+             "link": "https://drive.google.com/file/d/newer",
+             "submit_date": "2024/06/01"}
+    upsert_songs(conn, [older, newer])
+    rows = get_songs(conn, {"order_by": "s.submit_date", "descending": True})
+    assert rows[0]["title"] == "Newer Song"
