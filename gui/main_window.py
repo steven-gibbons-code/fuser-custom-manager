@@ -4,7 +4,7 @@ from datetime import date
 
 import customtkinter as ctk
 
-from db import init_db, get_songs, upsert_songs, get_song_by_id
+from db import init_db, get_songs, upsert_songs, get_song_by_id, count_songs
 from downloader import download
 from installer import scan_and_sync, install_pairs, uninstall, INSTALL_DIR
 from sources.fucuco import fetch_all as fetch_fucuco
@@ -23,6 +23,7 @@ class FuserApp(ctk.CTk):
         self.title("Fuser Custom Song Manager")
         self.geometry("1200x800")
         self.conn: sqlite3.Connection = init_db()
+        self._page: int = 0
         scan_and_sync(INSTALL_DIR, self.conn)
         self._build_ui()
         self._refresh_table()
@@ -31,7 +32,7 @@ class FuserApp(ctk.CTk):
     def _build_ui(self):
         self.grid_columnconfigure(0, weight=7)
         self.grid_columnconfigure(1, weight=3)
-        self.grid_rowconfigure(2, weight=1)
+        self.grid_rowconfigure(3, weight=1)  # table row is now 3
 
         # Row 0 — search + actions
         top = ctk.CTkFrame(self, height=48)
@@ -40,7 +41,7 @@ class FuserApp(ctk.CTk):
 
         ctk.CTkLabel(top, text="Search:").grid(row=0, column=0, padx=6)
         self._search = ctk.StringVar()
-        self._search.trace_add("write", lambda *_: self._refresh_table())
+        self._search.trace_add("write", lambda *_: self._filter_changed())
         ctk.CTkEntry(top, textvariable=self._search, width=240).grid(
             row=0, column=1, padx=4, sticky="ew")
 
@@ -59,51 +60,95 @@ class FuserApp(ctk.CTk):
         ctk.CTkLabel(fbar, text="Source:").pack(side="left", padx=6)
         self._source = ctk.StringVar(value="All Sources")
         ctk.CTkOptionMenu(fbar, variable=self._source, values=SOURCES, width=130,
-                           command=lambda _: self._refresh_table()).pack(side="left", padx=4)
+                           command=lambda _: self._filter_changed()).pack(side="left", padx=4)
 
         QUALITIES = ["All Quality", "Official", "Definitive", "Complete", "Other"]
         ctk.CTkLabel(fbar, text="Quality:").pack(side="left", padx=(10, 4))
         self._quality = ctk.StringVar(value="All Quality")
         ctk.CTkOptionMenu(fbar, variable=self._quality, values=QUALITIES, width=110,
-                           command=lambda _: self._refresh_table()).pack(side="left", padx=4)
+                           command=lambda _: self._filter_changed()).pack(side="left", padx=4)
+
+        INSTALLED_OPTS = ["All", "Installed", "Not installed"]
+        ctk.CTkLabel(fbar, text="Status:").pack(side="left", padx=(10, 4))
+        self._installed = ctk.StringVar(value="All")
+        ctk.CTkOptionMenu(fbar, variable=self._installed, values=INSTALLED_OPTS, width=110,
+                           command=lambda _: self._filter_changed()).pack(side="left", padx=4)
 
         ctk.CTkLabel(fbar, text="Genre:").pack(side="left", padx=(10, 4))
         self._genre = ctk.StringVar()
-        self._genre.trace_add("write", lambda *_: self._refresh_table())
+        self._genre.trace_add("write", lambda *_: self._filter_changed())
         ctk.CTkEntry(fbar, textvariable=self._genre, width=100).pack(side="left", padx=2)
 
         ctk.CTkLabel(fbar, text="BPM:").pack(side="left", padx=(10, 4))
         self._bpm_min = ctk.StringVar()
         self._bpm_max = ctk.StringVar()
-        self._bpm_min.trace_add("write", lambda *_: self._refresh_table())
-        self._bpm_max.trace_add("write", lambda *_: self._refresh_table())
+        self._bpm_min.trace_add("write", lambda *_: self._filter_changed())
+        self._bpm_max.trace_add("write", lambda *_: self._filter_changed())
         ctk.CTkEntry(fbar, textvariable=self._bpm_min, width=55,
                       placeholder_text="min").pack(side="left", padx=2)
         ctk.CTkLabel(fbar, text="–").pack(side="left")
         ctk.CTkEntry(fbar, textvariable=self._bpm_max, width=55,
                       placeholder_text="max").pack(side="left", padx=2)
 
-        # Row 2 — table + detail
+        SORT_OPTS = ["Artist A–Z", "Newest First", "BPM ↑", "BPM ↓"]
+        ctk.CTkLabel(fbar, text="Sort:").pack(side="left", padx=(10, 4))
+        self._sort = ctk.StringVar(value="Artist A–Z")
+        ctk.CTkOptionMenu(fbar, variable=self._sort, values=SORT_OPTS, width=120,
+                           command=lambda _: self._filter_changed()).pack(side="left", padx=4)
+
+        # Row 2 — pagination bar
+        pbar = ctk.CTkFrame(self, height=36)
+        pbar.grid(row=2, column=0, columnspan=2, sticky="ew", padx=8, pady=(4, 0))
+
+        self._prev_btn = ctk.CTkButton(pbar, text="← Prev", width=70,
+                                        command=self._prev_page, state="disabled")
+        self._prev_btn.pack(side="left", padx=6)
+
+        self._page_lbl = ctk.CTkLabel(pbar, text="Page 1 of 1  (0 songs)")
+        self._page_lbl.pack(side="left", padx=8)
+
+        self._next_btn = ctk.CTkButton(pbar, text="Next →", width=70,
+                                        command=self._next_page, state="disabled")
+        self._next_btn.pack(side="left", padx=6)
+
+        # Row 3 — table + detail
         self.song_table = SongTable(self, on_select=self._on_select)
-        self.song_table.grid(row=2, column=0, sticky="nsew", padx=(8, 4), pady=8)
+        self.song_table.grid(row=3, column=0, sticky="nsew", padx=(8, 4), pady=8)
 
         self.detail_panel = DetailPanel(self, conn=self.conn,
                                          on_download=self._on_download,
                                          on_uninstall=self._on_uninstall)
-        self.detail_panel.grid(row=2, column=1, sticky="nsew", padx=(4, 8), pady=8)
+        self.detail_panel.grid(row=3, column=1, sticky="nsew", padx=(4, 8), pady=8)
 
-        # Row 3 — status bar
+        # Row 4 — status bar
         self.status_bar = StatusBar(self)
-        self.status_bar.grid(row=3, column=0, columnspan=2,
+        self.status_bar.grid(row=4, column=0, columnspan=2,
                               sticky="ew", padx=8, pady=(0, 8))
 
     # ── Helpers ───────────────────────────────────────────────────────────
+    _SORT_MAP = {
+        "Artist A–Z":   ("s.artist",      False),
+        "Newest First": ("s.submit_date", True),
+        "BPM ↑":        ("s.bpm",         False),
+        "BPM ↓":        ("s.bpm",         True),
+    }
+    _INSTALLED_MAP = {
+        "Installed":     "installed",
+        "Not installed": "not_installed",
+    }
+
     def _filters(self) -> dict:
-        f: dict = {"search": self._search.get()}
+        f: dict = {
+            "search": self._search.get(),
+            "offset": self._page * 100,
+        }
         if self._source.get() != "All Sources":
             f["source"] = self._source.get()
         if self._quality.get() != "All Quality":
             f["quality"] = self._quality.get()
+        installed_val = self._INSTALLED_MAP.get(self._installed.get())
+        if installed_val:
+            f["installed"] = installed_val
         if self._genre.get():
             f["genre"] = self._genre.get()
         try:
@@ -116,10 +161,36 @@ class FuserApp(ctk.CTk):
                 f["bpm_max"] = int(self._bpm_max.get())
         except ValueError:
             pass
+        order_by, descending = self._SORT_MAP.get(self._sort.get(), ("s.artist", False))
+        f["order_by"] = order_by
+        if descending:
+            f["descending"] = True
         return f
 
     def _refresh_table(self):
-        self.song_table.load(get_songs(self.conn, self._filters()))
+        filters = self._filters()
+        rows = get_songs(self.conn, filters)
+        total = count_songs(self.conn, filters)
+        self.song_table.load(rows)
+        total_pages = max(1, (total + 99) // 100)
+        self._page_lbl.configure(
+            text=f"Page {self._page + 1} of {total_pages}  ({total:,} songs)")
+        self._prev_btn.configure(state="normal" if self._page > 0 else "disabled")
+        self._next_btn.configure(
+            state="normal" if (self._page + 1) * 100 < total else "disabled")
+
+    def _filter_changed(self):
+        self._page = 0
+        self._refresh_table()
+
+    def _prev_page(self):
+        if self._page > 0:
+            self._page -= 1
+            self._refresh_table()
+
+    def _next_page(self):
+        self._page += 1
+        self._refresh_table()
 
     def _on_select(self, song: dict):
         self.detail_panel.show(song)
