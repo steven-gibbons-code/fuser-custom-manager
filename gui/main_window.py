@@ -24,6 +24,7 @@ class FuserApp(ctk.CTk):
         self.geometry("1200x800")
         self.conn: sqlite3.Connection = init_db()
         self._page: int = 0
+        self._total_songs: int = 0
         scan_and_sync(INSTALL_DIR, self.conn)
         self._build_ui()
         self._refresh_table()
@@ -170,14 +171,14 @@ class FuserApp(ctk.CTk):
     def _refresh_table(self):
         filters = self._filters()
         rows = get_songs(self.conn, filters)
-        total = count_songs(self.conn, filters)
+        self._total_songs = count_songs(self.conn, filters)
         self.song_table.load(rows)
-        total_pages = max(1, (total + 99) // 100)
+        total_pages = max(1, (self._total_songs + 99) // 100)
         self._page_lbl.configure(
-            text=f"Page {self._page + 1} of {total_pages}  ({total:,} songs)")
+            text=f"Page {self._page + 1} of {total_pages}  ({self._total_songs:,} songs)")
         self._prev_btn.configure(state="normal" if self._page > 0 else "disabled")
         self._next_btn.configure(
-            state="normal" if (self._page + 1) * 100 < total else "disabled")
+            state="normal" if (self._page + 1) * 100 < self._total_songs else "disabled")
 
     def _filter_changed(self):
         self._page = 0
@@ -189,8 +190,9 @@ class FuserApp(ctk.CTk):
             self._refresh_table()
 
     def _next_page(self):
-        self._page += 1
-        self._refresh_table()
+        if (self._page + 1) * 100 < self._total_songs:
+            self._page += 1
+            self._refresh_table()
 
     def _on_select(self, song: dict):
         self.detail_panel.show(song)
