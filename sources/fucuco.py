@@ -91,6 +91,7 @@ def normalise_row(row: dict, source: str) -> dict | None:
     disc3_col    = _find(h, "Disc 3", "Disc 3 ")
     disc4_col    = _find(h, "Disc 4", "Disc 4 ")
     download_col = _find(h, "Download")
+    submit_date_col = _find(h, "Submit Date")
 
     de_val = row.get(de_col or "", "").strip()
     if _is_ref_error(de_val):
@@ -119,6 +120,7 @@ def normalise_row(row: dict, source: str) -> dict | None:
         "disc3":          row.get(disc3_col  or "", "").strip() or None,
         "disc4":          row.get(disc4_col  or "", "").strip() or None,
         "download_type":  row.get(download_col or "", "").strip() or None,
+        "submit_date":    row.get(submit_date_col or "", "").strip() or None,
         "link":           link,
         "link_host":      detect_link_host(link),
         "last_seen":      date.today().isoformat(),
