@@ -137,6 +137,25 @@ The NEW SUBMISSIONS tab's gviz API returns only 4 rows — the first row is a SE
 
 ---
 
+## Feature: Color-coded quality tiers and Clear Filters button
+
+**Date:** 2026-05-08
+**Files:** `gui/song_table.py`, `gui/main_window.py`
+
+### Changes
+
+**`gui/song_table.py`** — Quality column text is now color-coded:
+- **Official** → purple (`#bb86fc`)
+- **Definitive** → platinum/silver (`#e8e8e8`)
+- **Complete** → gold (`#ffd700`)
+- **Other** → dim gray (`#888888`)
+
+Colors match the fucuco sheet's convention. Tags are applied as ttk foreground styles and stack with the existing green row background for installed songs.
+
+**`gui/main_window.py`** — New **"Clear Filters"** button at the end of the filter bar resets all filter controls (search, source, quality, status, genre, BPM min/max, sort) back to defaults and triggers a fresh unfiltered query in one click.
+
+---
+
 ## Feature: Manual install toggle for manually-downloaded songs
 
 **Date:** 2026-05-08
