@@ -1,3 +1,4 @@
+from pathlib import Path
 import sqlite3
 import threading
 from datetime import date
@@ -6,7 +7,7 @@ import customtkinter as ctk
 
 from db import init_db, get_songs, upsert_songs, get_song_by_id, count_songs
 from downloader import download
-from installer import scan_and_sync, install_pairs, uninstall, INSTALL_DIR
+from installer import scan_and_sync, install_pairs, install_manual_files, uninstall, INSTALL_DIR
 from sources.fucuco import fetch_all as fetch_fucuco
 from sources.fusersoundlab import fetch_all as fetch_fsl
 from gui.song_table import SongTable
@@ -118,7 +119,8 @@ class FuserApp(ctk.CTk):
 
         self.detail_panel = DetailPanel(self, conn=self.conn,
                                          on_download=self._on_download,
-                                         on_uninstall=self._on_uninstall)
+                                         on_uninstall=self._on_uninstall,
+                                         on_manual_install=self._on_manual_install)
         self.detail_panel.grid(row=3, column=1, sticky="nsew", padx=(4, 8), pady=8)
 
         # Row 4 — status bar
@@ -235,6 +237,12 @@ class FuserApp(ctk.CTk):
             self.after(0, self.status_bar.set_idle)
         else:
             self.after(0, lambda: self.status_bar.set_error(result.error_msg or "Unknown error"))
+
+    def _on_manual_install(self, song: dict, pak_path: Path, sig_path: Path | None):
+        install_manual_files(song["id"], song["artist"], pak_path, sig_path, INSTALL_DIR, self.conn)
+        self._refresh_table()
+        self.detail_panel.show(get_song_by_id(self.conn, song["id"]) or {})
+        self.status_bar.set_done(song["title"])
 
     def _on_uninstall(self, song: dict):
         uninstall(song["id"], INSTALL_DIR, self.conn)

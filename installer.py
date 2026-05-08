@@ -1,30 +1,24 @@
-import re
 import shutil
 import sqlite3
 from pathlib import Path
 
-from db import mark_installed, mark_uninstalled, get_installed, get_songs, get_installed_for_song
+from db import mark_installed, mark_uninstalled, get_installed, get_songs
 from downloader import DownloadResult
 
 INSTALL_DIR = Path(r"C:\Fuser\Fuser\Content\Paks\custom_songs")
-_ILLEGAL = re.compile(r'[<>:"/\\|?*]')
 
+
+import re
 
 def sanitise_artist(name: str) -> str:
-    return " ".join(_ILLEGAL.sub("", name).split())
+    return " ".join(re.sub(r'[<>:"/\\|?*]', "", name).split())
 
 
 def install_pairs(result: DownloadResult, song_id: int, artist: str,
                   install_root: Path, conn: sqlite3.Connection) -> None:
-    if len(result.pairs) > 1:
-        # DB schema supports one installed record per song_id.
-        # Multi-song folder downloads are not yet supported — install first pair only.
-        pairs_to_install = result.pairs[:1]
-    else:
-        pairs_to_install = result.pairs
     artist_dir = install_root / sanitise_artist(artist)
     artist_dir.mkdir(parents=True, exist_ok=True)
-    for pak_src, sig_src in pairs_to_install:
+    for pak_src, sig_src in result.pairs:
         pak_dst = artist_dir / pak_src.name
         shutil.move(str(pak_src), str(pak_dst))
         sig_dst = ""
@@ -33,22 +27,41 @@ def install_pairs(result: DownloadResult, song_id: int, artist: str,
             shutil.move(str(sig_src), str(sig_dst_path))
             sig_dst = str(sig_dst_path)
         mark_installed(conn, song_id, str(pak_dst), sig_dst)
-    # Clean up staging work_dir if present
-    if result.work_dir and result.work_dir.exists():
-        shutil.rmtree(result.work_dir, ignore_errors=True)
+
+
+def install_manual_files(song_id: int, artist: str, pak_path: Path, sig_path: Path | None,
+                         install_root: Path, conn: sqlite3.Connection) -> None:
+    """Copy user-selected .pak/.sig files into the install directory and mark installed.
+
+    Unlike install_pairs (which MOVES files from a staging temp dir), this
+    COPIES the files so the user's original download location is preserved.
+    """
+    artist_dir = install_root / sanitise_artist(artist)
+    artist_dir.mkdir(parents=True, exist_ok=True)
+
+    pak_dst = artist_dir / pak_path.name
+    shutil.copy2(str(pak_path), str(pak_dst))
+
+    sig_dst = ""
+    if sig_path and sig_path.exists():
+        sig_dst_path = artist_dir / sig_path.name
+        shutil.copy2(str(sig_path), str(sig_dst_path))
+        sig_dst = str(sig_dst_path)
+
+    mark_installed(conn, song_id, str(pak_dst), sig_dst)
 
 
 def uninstall(song_id: int, install_root: Path, conn: sqlite3.Connection) -> None:
-    for rec in get_installed_for_song(conn, song_id):
+    for rec in get_installed(conn):
+        if rec["song_id"] != song_id:
+            continue
         for key in ("pak_path", "sig_path"):
             p = Path(rec[key]) if rec.get(key) else None
             if p and p.exists():
                 p.unlink()
-        pak_path = rec.get("pak_path")
-        if pak_path:
-            artist_dir = Path(pak_path).parent
-            if artist_dir.exists() and not any(artist_dir.iterdir()):
-                artist_dir.rmdir()
+        artist_dir = Path(rec["pak_path"]).parent
+        if artist_dir.exists() and not any(artist_dir.iterdir()):
+            artist_dir.rmdir()
     mark_uninstalled(conn, song_id)
 
 

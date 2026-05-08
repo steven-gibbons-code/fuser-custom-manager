@@ -1,4 +1,6 @@
+from tkinter import filedialog
 import webbrowser
+from pathlib import Path
 import sqlite3
 import customtkinter as ctk
 
@@ -25,11 +27,12 @@ _FIELDS = [
 
 class DetailPanel(ctk.CTkScrollableFrame):
     def __init__(self, master, conn: sqlite3.Connection,
-                 on_download=None, on_uninstall=None, **kwargs):
+                 on_download=None, on_uninstall=None, on_manual_install=None, **kwargs):
         super().__init__(master, **kwargs)
         self._conn = conn
         self._on_download = on_download
         self._on_uninstall = on_uninstall
+        self._on_manual_install = on_manual_install
         self._song: dict | None = None
         self._build()
 
@@ -62,14 +65,20 @@ class DetailPanel(ctk.CTkScrollableFrame):
         self._dl_btn = ctk.CTkButton(self, text="Download & Install", command=self._download)
         self._dl_btn.grid(row=base + 2, column=0, columnspan=2, sticky="ew", padx=10, pady=4)
 
+        self._mark_btn = ctk.CTkButton(
+            self, text="Mark as Installed (browse .pak…)",
+            fg_color="#3a5a7a", hover_color="#4a7a9a",
+            command=self._browse_manual_install)
+        self._mark_btn.grid(row=base + 3, column=0, columnspan=2, sticky="ew", padx=10, pady=4)
+
         self._un_btn = ctk.CTkButton(self, text="Uninstall",
                                       fg_color="#7d1a1a", hover_color="#a32020",
                                       command=self._uninstall)
-        self._un_btn.grid(row=base + 3, column=0, columnspan=2, sticky="ew", padx=10, pady=4)
+        self._un_btn.grid(row=base + 4, column=0, columnspan=2, sticky="ew", padx=10, pady=4)
 
         self._manual_lbl = ctk.CTkLabel(
             self, text="", text_color="#f4a261", wraplength=240, justify="left")
-        self._manual_lbl.grid(row=base + 4, column=0, columnspan=2,
+        self._manual_lbl.grid(row=base + 5, column=0, columnspan=2,
                                sticky="w", padx=10, pady=(4, 0))
 
         self._sync_buttons()
@@ -100,10 +109,12 @@ class DetailPanel(ctk.CTkScrollableFrame):
     def _sync_buttons(self):
         if not self._song:
             self._dl_btn.configure(state="disabled")
+            self._mark_btn.configure(state="disabled")
             self._un_btn.configure(state="disabled")
             return
         installed = bool(self._song.get("pak_path"))
         self._dl_btn.configure(state="disabled" if installed else "normal")
+        self._mark_btn.configure(state="disabled" if installed else "normal")
         self._un_btn.configure(state="normal" if installed else "disabled")
 
     def _open_link(self):
@@ -116,6 +127,28 @@ class DetailPanel(ctk.CTkScrollableFrame):
         if self._song and self._on_download:
             self._dl_btn.configure(state="disabled")
             self._on_download(self._song)
+
+    def _browse_manual_install(self):
+        if not self._song or not self._on_manual_install:
+            return
+        # Hide any previous manual message
+        self._manual_lbl.configure(text="")
+
+        pak_path = filedialog.askopenfilename(
+            title="Select .pak file to install",
+            filetypes=[("PAK files", "*.pak"), ("All files", "*.*")],
+            parent=self.winfo_toplevel(),
+        )
+        if not pak_path:
+            return  # user cancelled
+
+        pak = Path(pak_path)
+
+        # Try to find a matching .sig in the same directory
+        sig_candidate = pak.with_suffix(".sig")
+        sig = sig_candidate if sig_candidate.exists() else None
+
+        self._on_manual_install(self._song, pak, sig)
 
     def _uninstall(self):
         if self._song and self._on_uninstall:
