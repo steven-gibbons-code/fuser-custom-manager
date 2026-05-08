@@ -188,13 +188,15 @@ Added a **"Mark as Installed (browse .pak…)"** button to the detail panel, pos
 
 ---
 
-## Fix: Larger table font and row height for readability
+## Fix: Larger table font, row height, and zebra striping for readability
 
 **Date:** 2026-05-08
 **Files:** `gui/song_table.py`
 
-### Change
-Increased the song table's `Treeview` font from 10pt to **11pt** and row height from 24px to **28px**. Uses `TkDefaultFont` as the DPI-aware base so it respects Windows display scaling settings.
+### Changes
+- Increased table font from 10pt to **11pt** (now uses `TkDefaultFont` as DPI-aware base)
+- Row height bumped from 24px to **28px**
+- Added **alternating row colors** — even rows use a slightly lighter shade (`#353535`) against the default dark background (`#2b2b2b`), making song lists dramatically easier to scan. The installed-song green tint still overrides the zebra stripe on installed rows.
 
 ---
 
