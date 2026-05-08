@@ -11,12 +11,12 @@ _QUALITY_COLORS = {
 _QUALITY_ABBR = {"Official": "Off", "Definitive": "Def", "Complete": "Cmp"}
 
 COLUMNS = [
-    ("status",  "Status",  55),
-    ("quality", "Quality", 45),
-    ("artist",  "Artist",  160),
-    ("title",   "Title",   200),
-    ("creator", "Creator", 120),
-    ("bpm",     "BPM",     50),
+    ("status",  "Status",  25),
+    ("quality", "Quality", 35),
+    ("artist",  "Artist",  150),
+    ("title",   "Title",   220),
+    ("creator", "Creator", 80),
+    ("bpm",     "BPM",     30),
     ("key",     "Key",     90),
     ("genre",   "Genre",   100),
     ("year",    "Year",    50),
@@ -40,9 +40,9 @@ class SongTable(ctk.CTkFrame):
         style = ttk.Style()
         style.theme_use("clam")
         base_font = tkfont.nametofont("TkDefaultFont")
-        base_font.configure(size=11)
-        table_font = (base_font.actual("family"), 11)
-        bold_font = (base_font.actual("family"), 11, "bold")
+        base_font.configure(size=15)
+        table_font = (base_font.actual("family"), 15)
+        bold_font = (base_font.actual("family"), 15, "bold")
 
         style.configure("Treeview", background="#2b2b2b", foreground="white",
                          fieldbackground="#2b2b2b", rowheight=28, font=table_font)
@@ -63,6 +63,7 @@ class SongTable(ctk.CTkFrame):
         vsb.grid(row=0, column=1, sticky="ns")
 
         self._tree.tag_configure("installed", background="#1a3a2a")
+        self._tree.tag_configure("evenrow", background="#353535")
         for tier, color in _QUALITY_COLORS.items():
             self._tree.tag_configure(f"q_{tier}", foreground=color)
         self._tree.bind("<<TreeviewSelect>>", self._on_tree_select)
@@ -70,7 +71,7 @@ class SongTable(ctk.CTkFrame):
     def load(self, rows: list[dict]):
         self._rows = rows
         self._tree.delete(*self._tree.get_children())
-        for r in rows:
+        for i, r in enumerate(rows):
             values = (
                 "✓" if r.get("pak_path") else "",
                 _QUALITY_ABBR.get(r.get("quality", ""), ""),
@@ -86,8 +87,15 @@ class SongTable(ctk.CTkFrame):
             quality_key = r.get("quality", "")
             color_tag = f"q_{quality_key}" if quality_key in _QUALITY_COLORS else ""
             installed_tag = "installed" if r.get("pak_path") else ""
-            tags_tuple = tuple(t for t in (installed_tag, color_tag) if t)
-            self._tree.insert("", "end", iid=str(r["id"]), values=values, tags=tags_tuple)
+            # Stack tags: evenrow bg first so installed bg overrides it
+            tags = []
+            if i % 2 == 1:
+                tags.append("evenrow")
+            if installed_tag:
+                tags.append(installed_tag)
+            if color_tag:
+                tags.append(color_tag)
+            self._tree.insert("", "end", iid=str(r["id"]), values=values, tags=tuple(tags))
 
     def _toggle_sort(self, col: str):
         if self._sort_col == col:
