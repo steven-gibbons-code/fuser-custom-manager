@@ -188,6 +188,16 @@ Added a **"Mark as Installed (browse .pak…)"** button to the detail panel, pos
 
 ---
 
+## Fix: Larger table font and row height for readability
+
+**Date:** 2026-05-08
+**Files:** `gui/song_table.py`
+
+### Change
+Increased the song table's `Treeview` font from 10pt to **11pt** and row height from 24px to **28px**. Uses `TkDefaultFont` as the DPI-aware base so it respects Windows display scaling settings.
+
+---
+
 ## Dependencies added
 
 | Package | Version | Reason |
