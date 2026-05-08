@@ -39,7 +39,7 @@ class SongTable(ctk.CTkFrame):
 
         style = ttk.Style()
         style.theme_use("clam")
-        base_font = tkfont.named_font("TkDefaultFont")
+        base_font = tkfont.nametofont("TkDefaultFont")
         base_font.configure(size=11)
         table_font = (base_font.actual("family"), 11)
         bold_font = (base_font.actual("family"), 11, "bold")
