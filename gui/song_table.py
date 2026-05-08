@@ -1,3 +1,4 @@
+import tkinter.font as tkfont
 import customtkinter as ctk
 from tkinter import ttk
 
@@ -38,10 +39,15 @@ class SongTable(ctk.CTkFrame):
 
         style = ttk.Style()
         style.theme_use("clam")
+        base_font = tkfont.named_font("TkDefaultFont")
+        base_font.configure(size=11)
+        table_font = (base_font.actual("family"), 11)
+        bold_font = (base_font.actual("family"), 11, "bold")
+
         style.configure("Treeview", background="#2b2b2b", foreground="white",
-                         fieldbackground="#2b2b2b", rowheight=24, font=("Segoe UI", 10))
+                         fieldbackground="#2b2b2b", rowheight=28, font=table_font)
         style.configure("Treeview.Heading", background="#1f538d",
-                         foreground="white", font=("Segoe UI", 10, "bold"))
+                         foreground="white", font=bold_font)
         style.map("Treeview", background=[("selected", "#1f538d")])
 
         cols = [c[0] for c in COLUMNS]
