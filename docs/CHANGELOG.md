@@ -137,6 +137,38 @@ The NEW SUBMISSIONS tab's gviz API returns only 4 rows — the first row is a SE
 
 ---
 
+## Feature: Manual install toggle for manually-downloaded songs
+
+**Date:** 2026-05-08
+**Files:** `installer.py`, `gui/detail_panel.py`, `gui/main_window.py`
+
+### Problem
+Songs hosted on OneDrive, MediaFire, MEGA, or other non-GDrive hosts return `status: "manual"` from the downloader. The user manually downloads the `.pak`/`.sig` files, but has no way to tell the app "I've finished — mark this as installed". The only workaround was to place files in `custom_songs/<artist>/` and restart the app.
+
+### Solution
+Added a **"Mark as Installed (browse .pak…)"** button to the detail panel, positioned between the Download and Uninstall buttons.
+
+**`installer.py`:**
+- New function `install_manual_files()` — **copies** (preserves originals) user-selected `.pak`/`.sig` files into `C:\Fuser\Fuser\Content\Paks\custom_songs\<Artist>\` and registers in the DB
+
+**`gui/detail_panel.py`:**
+- New `on_manual_install` callback parameter
+- "Mark as Installed" button (steel blue, disabled when song is already installed)
+- Opens `tkinter.filedialog.askopenfilename()` filtered to `*.pak` files
+- Auto-discovers matching `.sig` in the same directory (same stem, `.sig` extension)
+
+**`gui/main_window.py`:**
+- `_on_manual_install()` callback wires `install_manual_files`, refreshes table & panel, shows "Installed: {title}" in status bar
+
+### UX flow
+1. User clicks Download & Install on a non-GDrive song → sees "Manual download required"
+2. User downloads `.pak`/`.sig` manually via the blue link
+3. User clicks **Mark as Installed (browse .pak…)** → file dialog opens
+4. User selects the `.pak` → app auto-finds `.sig`, copies both to install directory
+5. Row turns green with ✓ badge immediately
+
+---
+
 ## Dependencies added
 
 | Package | Version | Reason |
