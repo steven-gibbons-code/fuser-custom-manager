@@ -1,6 +1,12 @@
 import customtkinter as ctk
 from tkinter import ttk
 
+_QUALITY_COLORS = {
+    "Official":   "#bb86fc",  # purple
+    "Definitive": "#e8e8e8",  # platinum/silver
+    "Complete":   "#ffd700",  # gold
+    "Other":      "#888888",  # dim gray
+}
 _QUALITY_ABBR = {"Official": "Off", "Definitive": "Def", "Complete": "Cmp"}
 
 COLUMNS = [
@@ -51,6 +57,8 @@ class SongTable(ctk.CTkFrame):
         vsb.grid(row=0, column=1, sticky="ns")
 
         self._tree.tag_configure("installed", background="#1a3a2a")
+        for tier, color in _QUALITY_COLORS.items():
+            self._tree.tag_configure(f"q_{tier}", foreground=color)
         self._tree.bind("<<TreeviewSelect>>", self._on_tree_select)
 
     def load(self, rows: list[dict]):
@@ -69,8 +77,11 @@ class SongTable(ctk.CTkFrame):
                 r.get("year", ""),
                 r.get("source", ""),
             )
-            tag = "installed" if r.get("pak_path") else ""
-            self._tree.insert("", "end", iid=str(r["id"]), values=values, tags=(tag,))
+            quality_key = r.get("quality", "")
+            color_tag = f"q_{quality_key}" if quality_key in _QUALITY_COLORS else ""
+            installed_tag = "installed" if r.get("pak_path") else ""
+            tags_tuple = tuple(t for t in (installed_tag, color_tag) if t)
+            self._tree.insert("", "end", iid=str(r["id"]), values=values, tags=tags_tuple)
 
     def _toggle_sort(self, col: str):
         if self._sort_col == col:

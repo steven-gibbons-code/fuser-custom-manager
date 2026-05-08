@@ -98,6 +98,10 @@ class FuserApp(ctk.CTk):
         ctk.CTkOptionMenu(fbar, variable=self._sort, values=SORT_OPTS, width=120,
                            command=lambda _: self._filter_changed()).pack(side="left", padx=4)
 
+        ctk.CTkButton(fbar, text="Clear Filters", width=80, fg_color="#555555",
+                       hover_color="#777777",
+                       command=self._clear_filters).pack(side="left", padx=(10, 4))
+
         # Row 2 — pagination bar
         pbar = ctk.CTkFrame(self, height=36)
         pbar.grid(row=2, column=0, columnspan=2, sticky="ew", padx=8, pady=(4, 0))
@@ -195,6 +199,17 @@ class FuserApp(ctk.CTk):
         if (self._page + 1) * 100 < self._total_songs:
             self._page += 1
             self._refresh_table()
+
+    def _clear_filters(self):
+        self._search.set("")
+        self._source.set("All Sources")
+        self._quality.set("All Quality")
+        self._installed.set("All")
+        self._genre.set("")
+        self._bpm_min.set("")
+        self._bpm_max.set("")
+        self._sort.set("Artist A–Z")
+        self._filter_changed()
 
     def _on_select(self, song: dict):
         self.detail_panel.show(song)
