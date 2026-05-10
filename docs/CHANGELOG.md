@@ -200,6 +200,37 @@ Added a **"Mark as Installed (browse .pak…)"** button to the detail panel, pos
 
 ---
 
+## Feature: Configurable install path via Settings dialog
+
+**Date:** 2026-05-10
+**Files:** `db.py`, `installer.py`, `gui/main_window.py`
+
+### Problem
+The install directory was hardcoded to `C:\Fuser\Fuser\Content\Paks\custom_songs`. Users with Fuser installed to a different drive or custom path had no way to change it.
+
+### Solution
+Added a persistent `settings` table to the SQLite database and a Settings dialog accessible from the top toolbar.
+
+**`db.py`:**
+- New `settings` table (key-value pairs)
+- `get_setting(conn, key)` and `set_setting(conn, key, value)` functions
+- Default install path seeded on first launch
+
+**`installer.py`:**
+- Renamed `INSTALL_DIR` → `DEFAULT_INSTALL_DIR` to clarify it's a fallback default
+- All functions already accepted `install_root` as a parameter — no signature changes needed
+
+**`gui/main_window.py`:**
+- Path loaded from DB into `self._install_dir` at startup
+- All install operations use `self._install_dir` instead of the hardcoded constant
+- New **"Settings"** button in the top toolbar opens a modal dialog:
+  - Shows current path in an editable text field
+  - **Browse…** button opens a native directory picker
+  - **Save** writes the path to DB, creates it if missing, re-scans for installed files
+  - **Cancel** closes without changes
+
+---
+
 ## Dependencies added
 
 | Package | Version | Reason |
