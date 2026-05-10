@@ -200,6 +200,30 @@ Added a **"Mark as Installed (browse .pak…)"** button to the detail panel, pos
 
 ---
 
+## Chore: Public release polish — packaging, docs, licensing
+
+**Date:** 2026-05-10
+**Files:** `setup.py`, `LICENSE`, `.gitattributes`, `.gitignore`, `requirements.txt`, `dev-requirements.txt`, `README.md`, `app.py`, `docs/`
+
+### Changes
+
+**Packaging & install:**
+- New `setup.py` — installable via `pip install -e .`, exposes `fuser-manager` CLI command
+- `requirements.txt` — loosened version pins to `>=` ranges, removed pytest (dev-only)
+- New `dev-requirements.txt` — pytest only
+- `app.py` — added `main()` function for entry point compatibility
+
+**Licensing & cross-platform:**
+- New `LICENSE` — MIT
+- New `.gitattributes` — normalizes line endings across Windows/Linux, marks `.pak`/`.sig` as binary
+- `.gitignore` — added `dist/`, `build/`, `*.egg-info/`
+
+**Documentation:**
+- `README.md` — full rewrite: generic clone instructions, feature table, two install options, configuration guide, updated test count (92), project structure tree
+- Moved `docs/superpowers/` → `docs/dev/` to separate planning docs from user-facing content
+
+---
+
 ## Feature: Configurable install path via Settings dialog
 
 **Date:** 2026-05-10
