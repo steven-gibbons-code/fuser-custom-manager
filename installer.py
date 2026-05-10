@@ -5,7 +5,7 @@ from pathlib import Path
 from db import mark_installed, mark_uninstalled, get_installed, get_songs
 from downloader import DownloadResult
 
-INSTALL_DIR = Path(r"C:\Fuser\Fuser\Content\Paks\custom_songs")
+DEFAULT_INSTALL_DIR = Path(r"C:\Fuser\Fuser\Content\Paks\custom_songs")
 
 
 import re

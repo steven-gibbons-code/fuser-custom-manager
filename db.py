@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS installed (
     sig_path     TEXT,
     installed_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
 
 _IS_DEFINITIVE = """
@@ -147,6 +152,9 @@ def init_db(path: Path = DB_PATH) -> sqlite3.Connection:
         conn.executescript("DROP TABLE IF EXISTS installed; DROP TABLE IF EXISTS songs;")
     conn.executescript(SCHEMA)
     _migrate_add_columns(conn)
+    # Ensure default install path setting exists
+    if get_setting(conn, "install_path") is None:
+        set_setting(conn, "install_path", str(Path(r"C:\Fuser\Fuser\Content\Paks\custom_songs")))
     conn.commit()
     return conn
 
@@ -250,6 +258,19 @@ def get_installed_for_song(conn: sqlite3.Connection, song_id: int) -> list[dict]
         "SELECT i.*, s.artist, s.title FROM installed i JOIN songs s ON s.id = i.song_id WHERE i.song_id = ?",
         (song_id,)
     ).fetchall()]
+
+
+def get_setting(conn: sqlite3.Connection, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, value),
+    )
+    conn.commit()
 
 
 def get_song_by_id(conn: sqlite3.Connection, song_id: int) -> dict | None:

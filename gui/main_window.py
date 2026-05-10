@@ -5,9 +5,10 @@ from datetime import date
 
 import customtkinter as ctk
 
-from db import init_db, get_songs, upsert_songs, get_song_by_id, count_songs
+from tkinter import filedialog
+from db import init_db, get_songs, upsert_songs, get_song_by_id, count_songs, get_setting, set_setting
 from downloader import download
-from installer import scan_and_sync, install_pairs, install_manual_files, uninstall, INSTALL_DIR
+from installer import scan_and_sync, install_pairs, install_manual_files, uninstall, DEFAULT_INSTALL_DIR
 from sources.fucuco import fetch_all as fetch_fucuco
 from sources.fusersoundlab import fetch_all as fetch_fsl
 from gui.song_table import SongTable
@@ -26,7 +27,9 @@ class FuserApp(ctk.CTk):
         self.conn: sqlite3.Connection = init_db()
         self._page: int = 0
         self._total_songs: int = 0
-        scan_and_sync(INSTALL_DIR, self.conn)
+        path_str = get_setting(self.conn, "install_path")
+        self._install_dir = Path(path_str) if path_str else DEFAULT_INSTALL_DIR
+        scan_and_sync(self._install_dir, self.conn)
         self._build_ui()
         self._refresh_table()
 
@@ -53,6 +56,10 @@ class FuserApp(ctk.CTk):
 
         self._updated_lbl = ctk.CTkLabel(top, text="", text_color="#aaaaaa")
         self._updated_lbl.grid(row=0, column=4, padx=6)
+
+        ctk.CTkButton(top, text="Settings", width=70, fg_color="#555555",
+                       hover_color="#777777",
+                       command=self._open_settings).grid(row=0, column=5, padx=6)
 
         # Row 1 — filter bar
         fbar = ctk.CTkFrame(self, height=40)
@@ -211,6 +218,60 @@ class FuserApp(ctk.CTk):
         self._sort.set("Artist A–Z")
         self._filter_changed()
 
+    def _open_settings(self):
+        """Open a modal settings dialog to change the install path."""
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Settings")
+        dialog.geometry("520x200")
+        dialog.resizable(False, False)
+        dialog.transient(self)
+        dialog.grab_set()
+
+        frame = ctk.CTkFrame(dialog)
+        frame.pack(fill="both", expand=True, padx=16, pady=16)
+
+        ctk.CTkLabel(frame, text="Song Install Directory",
+                      font=ctk.CTkFont(weight="bold", size=13)).pack(anchor="w")
+
+        ctk.CTkLabel(frame, text="Choose where .pak/.sig files are installed:",
+                      text_color="#aaaaaa").pack(anchor="w", pady=(2, 8))
+
+        path_var = ctk.StringVar(value=str(self._install_dir))
+        entry = ctk.CTkEntry(frame, textvariable=path_var, width=480)
+        entry.pack(fill="x", pady=(0, 4))
+
+        def browse():
+            chosen = filedialog.askdirectory(
+                title="Select install directory",
+                initialdir=path_var.get(),
+                parent=dialog,
+            )
+            if chosen:
+                path_var.set(chosen)
+
+        def save():
+            new_path = Path(path_var.get().strip())
+            if not new_path.exists():
+                new_path.mkdir(parents=True, exist_ok=True)
+            set_setting(self.conn, "install_path", str(new_path))
+            self._install_dir = new_path
+            scan_and_sync(self._install_dir, self.conn)
+            self._refresh_table()
+            dialog.destroy()
+            self.status_bar.set_idle()
+            self.status_bar._lbl.configure(text=f"Install path: {new_path}")
+
+        btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        btn_frame.pack(fill="x", pady=(8, 0))
+
+        ctk.CTkButton(btn_frame, text="Browse…", width=80,
+                       command=browse).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(btn_frame, text="Save", width=80,
+                       command=save).pack(side="left", padx=6)
+        ctk.CTkButton(btn_frame, text="Cancel", width=80,
+                       fg_color="#555555", hover_color="#777777",
+                       command=dialog.destroy).pack(side="left", padx=6)
+
     def _on_select(self, song: dict):
         self.detail_panel.show(song)
 
@@ -244,7 +305,7 @@ class FuserApp(ctk.CTk):
             progress_cb=lambda p: self.after(0, lambda: self.status_bar.set_progress(p)),
         )
         if result.status == "ok":
-            install_pairs(result, song["id"], song["artist"], INSTALL_DIR, self.conn)
+            install_pairs(result, song["id"], song["artist"], self._install_dir, self.conn)
             self.after(0, self._refresh_table)
             self.after(0, lambda: self.status_bar.set_done(song["title"]))
         elif result.status == "manual":
@@ -254,12 +315,12 @@ class FuserApp(ctk.CTk):
             self.after(0, lambda: self.status_bar.set_error(result.error_msg or "Unknown error"))
 
     def _on_manual_install(self, song: dict, pak_path: Path, sig_path: Path | None):
-        install_manual_files(song["id"], song["artist"], pak_path, sig_path, INSTALL_DIR, self.conn)
+        install_manual_files(song["id"], song["artist"], pak_path, sig_path, self._install_dir, self.conn)
         self._refresh_table()
         self.detail_panel.show(get_song_by_id(self.conn, song["id"]) or {})
         self.status_bar.set_done(song["title"])
 
     def _on_uninstall(self, song: dict):
-        uninstall(song["id"], INSTALL_DIR, self.conn)
+        uninstall(song["id"], self._install_dir, self.conn)
         self._refresh_table()
         self.detail_panel.show(get_song_by_id(self.conn, song["id"]) or {})
