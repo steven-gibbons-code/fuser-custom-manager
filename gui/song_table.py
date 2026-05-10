@@ -25,9 +25,10 @@ COLUMNS = [
 
 
 class SongTable(ctk.CTkFrame):
-    def __init__(self, master, on_select=None, **kwargs):
+    def __init__(self, master, on_select=None, on_selection_change=None, **kwargs):
         super().__init__(master, **kwargs)
         self._on_select = on_select
+        self._on_selection_change = on_selection_change
         self._rows: list[dict] = []
         self._sort_col = "artist"
         self._sort_asc = True
@@ -51,7 +52,7 @@ class SongTable(ctk.CTkFrame):
         style.map("Treeview", background=[("selected", "#1f538d")])
 
         cols = [c[0] for c in COLUMNS]
-        self._tree = ttk.Treeview(self, columns=cols, show="headings", selectmode="browse")
+        self._tree = ttk.Treeview(self, columns=cols, show="headings", selectmode="extended")
         for col_id, label, width in COLUMNS:
             self._tree.heading(col_id, text=label,
                                 command=lambda c=col_id: self._toggle_sort(c))
@@ -105,10 +106,31 @@ class SongTable(ctk.CTkFrame):
         self._rows.sort(key=lambda r: (r.get(col) or ""), reverse=not self._sort_asc)
         self.load(self._rows)
 
+    def get_selected_songs(self) -> list[dict]:
+        """Return the list of song dicts for all currently selected rows."""
+        sel_ids = set(self._tree.selection())
+        return [r for r in self._rows if str(r["id"]) in sel_ids]
+
+    def select_all(self):
+        """Select all rows on the current page."""
+        for r in self._rows:
+            self._tree.selection_add(str(r["id"]))
+        if self._on_selection_change:
+            self._on_selection_change()
+
+    def deselect_all(self):
+        """Clear all selections."""
+        self._tree.selection_remove(*self._tree.selection())
+        if self._on_selection_change:
+            self._on_selection_change()
+
     def _on_tree_select(self, _event):
         sel = self._tree.selection()
+        if self._on_selection_change:
+            self._on_selection_change()
         if not sel or not self._on_select:
             return
-        song = next((r for r in self._rows if str(r["id"]) == sel[0]), None)
+        # For single-click detail panel, use the last-clicked item (not multi)
+        song = next((r for r in self._rows if str(r["id"]) == sel[-1]), None)
         if song:
             self._on_select(song)
