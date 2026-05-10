@@ -255,6 +255,39 @@ Added a persistent `settings` table to the SQLite database and a Settings dialog
 
 ---
 
+## Feature: Batch download — Shift-click multi-select with results dialog
+
+**Date:** 2026-05-10
+**Files:** `gui/song_table.py`, `gui/main_window.py`
+
+### Changes
+
+**`gui/song_table.py`** — Single-click row selection now uses `selectmode="extended"`:
+- Hold **Shift** and click to select a contiguous range of rows
+- Hold **Ctrl** and click to toggle individual rows
+- New `get_selected_songs()` method returns all selected song dicts
+- New `select_all()` / `deselect_all()` methods for page-level selection
+- New `on_selection_change` callback wires selection count to the batch button
+
+**`gui/main_window.py`** — Pagination bar (Row 2) now has:
+- **Select All** / **Deselect All** buttons on the right side
+- **Download Selected (N)** button (green, disabled when 0 selected)
+- `_on_batch_download()` filters out already-installed songs, runs downloads sequentially in a background thread
+- Progress shown in the status bar as `[1/10] Downloading: Song Title...`
+- On completion, a **Batch Download Results** dialog shows:
+  - Summary: "4 of 5 succeeded" (green if all ok, amber if any failed)
+  - Per-row results with icon (✓ installed, ⚠ manual, ✗ error, — skipped) and message
+  - Close button dismisses the dialog
+
+### UX flow
+1. User filters/sorts to find desired songs (across pages)
+2. Clicks **Select All** on the current page, repeats for other pages
+3. Clicks **Download Selected (10)**
+4. Wait while downloads run sequentially — status bar shows progress
+5. Results dialog appears reporting what succeeded, what needs manual download, and what failed
+
+---
+
 ## Dependencies added
 
 | Package | Version | Reason |
