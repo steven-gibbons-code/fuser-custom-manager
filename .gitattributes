@@ -1,0 +1,18 @@
+# Auto detect text files and normalize line endings
+* text=auto
+
+# Python source files
+*.py text diff=python
+
+# Windows-specific: keep CRLF in place for batch files
+*.bat text eol=crlf
+
+# Markdown and text files
+*.md text
+*.txt text
+*.cfg text
+*.ini text
+
+# Binary files
+*.pak binary
+*.sig binary

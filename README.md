@@ -1,118 +1,161 @@
 # Fuser Custom Song Manager
 
-A local desktop app for browsing, downloading, and installing custom songs for the game **Fuser** (Harmonix, EGS version).
+A local desktop app for browsing, downloading, and installing custom songs for the game **Fuser** (Harmonix).
 
 Pulls song listings from:
-- **fucuco.online** — large mainstream catalog backed by a public Google Sheet (3 tabs: main database, VGM, new submissions)
+- **fucuco.online** — large mainstream catalog backed by a public Google Sheet
 - **fusersoundlab.com** — indie and community releases
 
-Songs install as `.pak` + `.sig` file pairs into your Fuser `Content/Paks` directory, organised by artist.
+Songs install as `.pak` + `.sig` file pairs into your Fuser `Content/Paks` directory, organized by artist.
+
+![App screenshot](docs/screenshot.png)
+
+---
+
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| **Live search** | Filter by artist, title, or modder name as you type |
+| **Quality tiers** | Color-coded badges — purple for Official, platinum for Definitive, gold for Complete |
+| **Source filter** | Filter by catalog source (`fucuco_main`, `fucuco_vgm`, `fusersoundlab`) |
+| **Genre & BPM filters** | Narrow down by genre text or BPM range |
+| **Sort** | By artist, newest first, or BPM ascending/descending |
+| **Pagination** | 100 songs per page with prev/next navigation |
+| **Auto-download** | Google Drive links download via `gdown` with archive extraction (zip/rar/7z) |
+| **Manual install** | Browse for `.pak`/`.sig` files to mark manually-downloaded songs as installed |
+| **Uninstall** | Removes files and cleans up empty artist directories |
+| **Configurable install path** | Settings dialog to change where songs are installed (no longer hardcoded) |
+| **Clear Filters** | One-click reset of all filters and search |
+| **Status tracking** | Installed songs show a green row tint and ✓ badge |
+
+---
+
+## Quick Start
+
+### Option 1: Install as a package (recommended)
+
+```powershell
+git clone https://github.com/steven-gibbons-code/fuser-custom-manager.git
+cd fuser-custom-manager
+pip install -e .
+fuser-manager
+```
+
+### Option 2: Run from source
+
+```powershell
+git clone https://github.com/steven-gibbons-code/fuser-custom-manager.git
+cd fuser-custom-manager
+pip install -r requirements.txt
+python app.py
+```
 
 ---
 
 ## Requirements
 
-- Python 3.11 or newer
-- Fuser installed at `C:\Fuser\` (the fixed game path this app targets)
-- Internet connection for fetching catalogs and downloading songs
+- **Python 3.11 or newer**
+- **Fuser** installed on your system (the app can install songs to any directory you choose via Settings)
+- **Internet connection** for fetching catalogs and downloading songs
 
 ---
 
-## Setup
+## First Launch
 
-```powershell
-cd C:\Users\sgibb\Documents\ClaudeCode\fuser-custom-tool
-pip install -r requirements.txt
-```
-
----
-
-## Launch
-
-```powershell
-python app.py
-```
-
-The app opens a ~1200×800 dark-themed window. On first launch the catalog is empty — click **Refresh Sources** to fetch all listings.
+1. The app opens a ~1200×800 dark-themed window
+2. Click **Refresh Sources** (top-right) to fetch the song catalog
+3. The catalog is cached locally in `~/.fuser_manager/catalog.db` — subsequent launches are instant
+4. Click **Settings** (top-right) if you need to change the install directory
+5. Browse songs, filter, and click **Download & Install** on any song
 
 ---
 
-## Usage
+## Configuration
 
-### Refreshing the catalog
+### Install directory
 
-Click **Refresh Sources** (top-right). The app fetches all three fucuco Google Sheet tabs and scrapes fusersoundlab.com, then caches everything locally in `~/.fuser_manager/catalog.db`. This takes a few seconds depending on your connection. The "Updated YYYY-MM-DD" label confirms when the cache was last refreshed.
+Click **Settings** in the top toolbar to choose where `.pak`/`.sig` files are installed. The default is:
 
-You don't need to refresh every session — the local cache persists between launches.
-
-### Browsing and filtering
-
-| Control | What it does |
-|---------|-------------|
-| **Search box** | Live filter by artist, title, or creator (modder) name |
-| **Definitive only** | Show only songs marked as Definitive (complete with all features) |
-| **Source dropdown** | Filter by data source: `fucuco_main`, `fucuco_vgm`, `fucuco_new`, `fusersoundlab` |
-| **Genre** | Partial-match filter on genre |
-| **BPM min / max** | Filter by BPM range |
-| **Column headers** | Click any header to sort ascending; click again to sort descending |
-
-Installed songs appear with a **✓** in the Status column and a green row tint.
-Definitive songs display a **★** in the Definitive column.
-
-### Downloading and installing a song
-
-1. Click a row to select it — full metadata appears in the right panel.
-2. Click **Download & Install**.
-3. The status bar at the bottom shows progress. When complete it reads "Installed: {title}" briefly, then resets.
-4. The row turns green and the ✓ badge appears.
-
-Songs are installed to:
 ```
-C:\Fuser\Fuser\Content\Paks\custom_songs\<Artist Name>\<filename>.pak
-C:\Fuser\Fuser\Content\Paks\custom_songs\<Artist Name>\<filename>.sig
+C:\Fuser\Fuser\Content\Paks\custom_songs\
 ```
 
-### Manual downloads
+You can change this to any path — the app will create the directory if it doesn't exist.
 
-Some songs link to **OneDrive, MediaFire, MEGA, or other hosts**. These cannot be downloaded automatically. When you click Download & Install on such a song, the detail panel shows:
-
-> Manual download required. Click the link above to open in browser.
-
-Click the blue link to open the host page in your browser, download the `.pak` and `.sig` files manually, and place them in the appropriate artist folder under `C:\Fuser\Fuser\Content\Paks\custom_songs\`.
-
-Google Drive downloads that succeed but contain unexpected file types also fall back to this notice.
-
-### Uninstalling a song
-
-Select an installed song (green row) and click **Uninstall** (red button). This deletes the `.pak` and `.sig` files from disk and removes the artist folder if it becomes empty. The row reverts to uninstalled state immediately.
-
-### Definitive status explained
-
-Each song has a **Complete** field and a **DE Status** field from the source spreadsheet. The app derives **is_definitive** as follows:
-
-- Complete = `D` (marked Definitive by submitter) → Definitive
-- DE Status = `Eligible` and Complete = `C` → Definitive
-- DE Status blank, Complete = `C`, no notes → Definitive
-- Anything else → not Definitive
-
-The **Notes** field in the detail panel explains why a `C`-rated song isn't yet Definitive (e.g. "Few wrong notes on minor lead").
-
----
-
-## File locations
+### User data
 
 | Path | Purpose |
 |------|---------|
 | `~/.fuser_manager/catalog.db` | Local SQLite cache of all song listings and install records |
-| `~/.fuser_manager/staging/` | Temporary download area — cleaned up automatically after install |
-| `C:\Fuser\Fuser\Content\Paks\custom_songs\` | Where songs are installed |
+| `~/.fuser_manager/staging/` | Temporary download area — cleaned up after install |
 
 ---
 
-## Running tests
+## Manual Downloads
+
+Some songs link to **OneDrive, MediaFire, MEGA**, or other hosts. These cannot be downloaded automatically by the app. When you click **Download & Install** on such a song, the detail panel shows:
+
+> Manual download required. Click the link above to open in browser.
+
+Download the `.pak` and `.sig` files manually, then click **Mark as Installed (browse .pak…)** to register them in the app (files are copied, not moved — your originals are preserved).
+
+---
+
+## Quality Tiers
+
+| Tier | Color | Meaning |
+|------|-------|---------|
+| **Off** | Purple | Official DLC or base-game content |
+| **Def** | Platinum | Definitive — complete with all features |
+| **Cmp** | Gold | Complete song with minor notes |
+| *(blank)* | Gray | Other / in-progress |
+
+Derived from the sheet's `Complete`, `DE Status`, and `download_type` fields at catalog refresh time.
+
+---
+
+## Development
+
+### Running tests
 
 ```powershell
+pip install -r dev-requirements.txt
 pytest tests\ -v
 ```
 
-44 tests covering the database layer, source fetchers, downloader, and installer.
+92 tests covering the database layer, source fetchers, downloader, installer, and GUI imports.
+
+### Project structure
+
+```
+fuser-custom-manager/
+    app.py                  # Entry point
+    db.py                   # SQLite catalog & install tracking
+    downloader.py           # Automatic downloads (gdrive, archive extraction)
+    installer.py            # File placement, uninstall, disk scan
+    sources/
+        fucuco.py           # Google Sheets CSV fetcher
+        fusersoundlab.py    # HTML scraper
+    gui/
+        main_window.py      # Top-level window, filters, settings
+        song_table.py       # Sortable, paginated, zebra-striped table
+        detail_panel.py     # Song metadata, download & install buttons
+        status_bar.py       # Progress, error, and status messages
+    tests/                  # pytest test suite
+    docs/
+        CHANGELOG.md        # Release changelog
+        dev/                # Planning docs and design specs
+```
+
+---
+
+## License
+
+This project is open source under the [MIT License](LICENSE).
+
+---
+
+## Contributing
+
+Issues and pull requests are welcome! Check the [changelog](docs/CHANGELOG.md) for recent changes and `docs/dev/` for planning docs.
