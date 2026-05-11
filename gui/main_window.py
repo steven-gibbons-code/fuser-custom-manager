@@ -252,11 +252,15 @@ class FuserApp(ctk.CTk):
             def _thread():
                 new_path.mkdir(parents=True, exist_ok=True)
                 set_setting(self.conn, "install_path", str(new_path))
-                self._install_dir = new_path
-                scan_and_sync(self._install_dir, self.conn)
-                self.after(0, self._refresh_table)
-                self.after(0, lambda: self.status_bar.set_message(f"Install path: {new_path}"))
-                self.after(0, dialog.destroy)
+                scan_and_sync(new_path, self.conn)
+
+                def _finish():
+                    self._install_dir = new_path
+                    self._refresh_table()
+                    self.status_bar.set_message(f"Install path: {new_path}")
+                    dialog.destroy()
+
+                self.after(0, _finish)
 
             threading.Thread(target=_thread, daemon=True).start()
 
