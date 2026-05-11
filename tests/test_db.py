@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from db import init_db, upsert_songs, get_songs, mark_installed, mark_uninstalled, get_installed
+from db import init_db, upsert_songs, get_songs, mark_installed, mark_uninstalled, get_installed, get_setting, set_setting
 
 SONG = {
     "source": "fucuco_main", "artist": "Daft Punk", "title": "Get Lucky",
@@ -214,3 +214,24 @@ def test_get_songs_order_by_submit_date(tmp_path):
     upsert_songs(conn, [older, newer])
     rows = get_songs(conn, {"order_by": "s.submit_date", "descending": True})
     assert rows[0]["title"] == "Newer Song"
+
+def test_settings_table_created(conn):
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    assert "settings" in tables
+
+def test_get_set_setting(conn):
+    set_setting(conn, "my_key", "my_value")
+    assert get_setting(conn, "my_key") == "my_value"
+    assert get_setting(conn, "nonexistent") is None
+
+def test_init_db_seeds_default_install_path(tmp_path):
+    c = init_db(tmp_path / "fresh.db")
+    assert get_setting(c, "install_path") is not None
+
+def test_init_db_does_not_overwrite_existing_setting(tmp_path):
+    c = init_db(tmp_path / "fresh.db")
+    set_setting(c, "install_path", r"C:\custom\path")
+    c.close()
+    c2 = init_db(tmp_path / "fresh.db")
+    assert get_setting(c2, "install_path") == r"C:\custom\path"
