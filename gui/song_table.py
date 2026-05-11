@@ -107,6 +107,7 @@ class SongTable(ctk.CTkFrame):
         self.load(self._rows)
 
     def set_selectmode(self, mode: str):
+        assert mode in ("browse", "extended", "none"), f"Invalid selectmode: {mode!r}"
         self._tree.configure(selectmode=mode)
 
     def get_selected_songs(self) -> list[dict]:

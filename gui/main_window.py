@@ -336,6 +336,8 @@ class FuserApp(ctk.CTk):
         self.detail_panel.show(song)
 
     def _on_selection_change(self):
+        if not self._batch_mode:
+            return
         count = len(self.song_table.get_selected_songs())
         self._download_btn.configure(
             text=f"Download ({count})",
@@ -408,10 +410,10 @@ class FuserApp(ctk.CTk):
                 entry["message"] = result.error_msg or "Unknown error"
             results.append(entry)
         self.after(0, self._refresh_table)
-        self.after(0, lambda: self._show_batch_results(results))
+        self.after(0, lambda: self._show_batch_results(results, on_close=self._exit_batch_mode))
         self.after(0, self.status_bar.set_idle)
 
-    def _show_batch_results(self, results: list[dict]):
+    def _show_batch_results(self, results: list[dict], on_close=None):
         ok_count = sum(1 for r in results if r["status"] == "ok")
         total = len(results)
 
@@ -456,9 +458,13 @@ class FuserApp(ctk.CTk):
                 result_frame, text=msg, text_color="#aaaaaa", anchor="w",
             ).grid(row=i, column=2, sticky="w", padx=(8, 0))
 
+        def _close():
+            dialog.destroy()
+            if on_close:
+                on_close()
+
         ctk.CTkButton(
-            frame, text="Close", width=80,
-            command=lambda: (dialog.destroy(), self._exit_batch_mode()),
+            frame, text="Close", width=80, command=_close,
         ).grid(row=2, column=0, pady=(8, 0))
 
     # ── Refresh sources ───────────────────────────────────────────────────
