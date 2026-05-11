@@ -410,7 +410,6 @@ class FuserApp(ctk.CTk):
         self.after(0, self._refresh_table)
         self.after(0, lambda: self._show_batch_results(results))
         self.after(0, self.status_bar.set_idle)
-        self.after(0, self._exit_batch_mode)
 
     def _show_batch_results(self, results: list[dict]):
         ok_count = sum(1 for r in results if r["status"] == "ok")
@@ -458,7 +457,8 @@ class FuserApp(ctk.CTk):
             ).grid(row=i, column=2, sticky="w", padx=(8, 0))
 
         ctk.CTkButton(
-            frame, text="Close", width=80, command=dialog.destroy,
+            frame, text="Close", width=80,
+            command=lambda: (dialog.destroy(), self._exit_batch_mode()),
         ).grid(row=2, column=0, pady=(8, 0))
 
     # ── Refresh sources ───────────────────────────────────────────────────
