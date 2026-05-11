@@ -25,10 +25,9 @@ COLUMNS = [
 
 
 class SongTable(ctk.CTkFrame):
-    def __init__(self, master, on_select=None, on_selection_change=None, **kwargs):
+    def __init__(self, master, on_select=None, **kwargs):
         super().__init__(master, **kwargs)
         self._on_select = on_select
-        self._on_selection_change = on_selection_change
         self._rows: list[dict] = []
         self._sort_col = "artist"
         self._sort_asc = True
@@ -52,7 +51,7 @@ class SongTable(ctk.CTkFrame):
         style.map("Treeview", background=[("selected", "#1f538d")])
 
         cols = [c[0] for c in COLUMNS]
-        self._tree = ttk.Treeview(self, columns=cols, show="headings", selectmode="extended")
+        self._tree = ttk.Treeview(self, columns=cols, show="headings", selectmode="browse")
         for col_id, label, width in COLUMNS:
             self._tree.heading(col_id, text=label,
                                 command=lambda c=col_id: self._toggle_sort(c))
@@ -64,7 +63,7 @@ class SongTable(ctk.CTkFrame):
         vsb.grid(row=0, column=1, sticky="ns")
 
         self._tree.tag_configure("installed", background="#1a3a2a")
-        self._tree.tag_configure("evenrow", background="#353535")
+        self._tree.tag_configure("altrow", background="#353535")
         for tier, color in _QUALITY_COLORS.items():
             self._tree.tag_configure(f"q_{tier}", foreground=color)
         self._tree.bind("<<TreeviewSelect>>", self._on_tree_select)
@@ -88,10 +87,10 @@ class SongTable(ctk.CTkFrame):
             quality_key = r.get("quality", "")
             color_tag = f"q_{quality_key}" if quality_key in _QUALITY_COLORS else ""
             installed_tag = "installed" if r.get("pak_path") else ""
-            # Stack tags: evenrow bg first so installed bg overrides it
+            # Stack tags: altrow bg first so installed bg overrides it
             tags = []
             if i % 2 == 1:
-                tags.append("evenrow")
+                tags.append("altrow")
             if installed_tag:
                 tags.append(installed_tag)
             if color_tag:
@@ -106,31 +105,10 @@ class SongTable(ctk.CTkFrame):
         self._rows.sort(key=lambda r: (r.get(col) or ""), reverse=not self._sort_asc)
         self.load(self._rows)
 
-    def get_selected_songs(self) -> list[dict]:
-        """Return the list of song dicts for all currently selected rows."""
-        sel_ids = set(self._tree.selection())
-        return [r for r in self._rows if str(r["id"]) in sel_ids]
-
-    def select_all(self):
-        """Select all rows on the current page."""
-        for r in self._rows:
-            self._tree.selection_add(str(r["id"]))
-        if self._on_selection_change:
-            self._on_selection_change()
-
-    def deselect_all(self):
-        """Clear all selections."""
-        self._tree.selection_remove(*self._tree.selection())
-        if self._on_selection_change:
-            self._on_selection_change()
-
     def _on_tree_select(self, _event):
         sel = self._tree.selection()
-        if self._on_selection_change:
-            self._on_selection_change()
         if not sel or not self._on_select:
             return
-        # For single-click detail panel, use the last-clicked item (not multi)
-        song = next((r for r in self._rows if str(r["id"]) == sel[-1]), None)
+        song = next((r for r in self._rows if str(r["id"]) == sel[0]), None)
         if song:
             self._on_select(song)
