@@ -25,9 +25,10 @@ COLUMNS = [
 
 
 class SongTable(ctk.CTkFrame):
-    def __init__(self, master, on_select=None, **kwargs):
+    def __init__(self, master, on_select=None, on_selection_change=None, **kwargs):
         super().__init__(master, **kwargs)
         self._on_select = on_select
+        self._on_selection_change = on_selection_change
         self._rows: list[dict] = []
         self._sort_col = "artist"
         self._sort_asc = True
@@ -105,10 +106,30 @@ class SongTable(ctk.CTkFrame):
         self._rows.sort(key=lambda r: (r.get(col) or ""), reverse=not self._sort_asc)
         self.load(self._rows)
 
+    def set_selectmode(self, mode: str):
+        self._tree.configure(selectmode=mode)
+
+    def get_selected_songs(self) -> list[dict]:
+        sel_ids = set(self._tree.selection())
+        return [r for r in self._rows if str(r["id"]) in sel_ids]
+
+    def select_all(self):
+        for r in self._rows:
+            self._tree.selection_add(str(r["id"]))
+        if self._on_selection_change:
+            self._on_selection_change()
+
+    def deselect_all(self):
+        self._tree.selection_remove(*self._tree.selection())
+        if self._on_selection_change:
+            self._on_selection_change()
+
     def _on_tree_select(self, _event):
         sel = self._tree.selection()
+        if self._on_selection_change:
+            self._on_selection_change()
         if not sel or not self._on_select:
             return
-        song = next((r for r in self._rows if str(r["id"]) == sel[0]), None)
+        song = next((r for r in self._rows if str(r["id"]) == sel[-1]), None)
         if song:
             self._on_select(song)
