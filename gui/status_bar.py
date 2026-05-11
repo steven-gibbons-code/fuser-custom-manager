@@ -35,3 +35,7 @@ class StatusBar(ctk.CTkFrame):
         self._lbl.configure(text="Ready", text_color="white")
         self._bar.grid_remove()
         self._bar.set(0)
+
+    def set_message(self, text: str):
+        self._lbl.configure(text=text, text_color="white")
+        self._bar.grid_remove()

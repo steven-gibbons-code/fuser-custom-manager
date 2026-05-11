@@ -124,22 +124,8 @@ class FuserApp(ctk.CTk):
                                         command=self._next_page, state="disabled")
         self._next_btn.pack(side="left", padx=6)
 
-        ctk.CTkButton(pbar, text="Select All", width=70, fg_color="#555555",
-                       hover_color="#777777",
-                       command=self.song_table.select_all).pack(side="right", padx=2)
-        ctk.CTkButton(pbar, text="Deselect All", width=70, fg_color="#555555",
-                       hover_color="#777777",
-                       command=self.song_table.deselect_all).pack(side="right", padx=2)
-
-        self._batch_btn = ctk.CTkButton(pbar, text="Download Selected (0)",
-                                         width=160, fg_color="#1f6e3a",
-                                         hover_color="#28964a", state="disabled",
-                                         command=self._on_batch_download)
-        self._batch_btn.pack(side="right", padx=(2, 8))
-
         # Row 3 — table + detail
-        self.song_table = SongTable(self, on_select=self._on_select,
-                                     on_selection_change=self._on_selection_change)
+        self.song_table = SongTable(self, on_select=self._on_select)
         self.song_table.grid(row=3, column=0, sticky="nsew", padx=(8, 4), pady=8)
 
         self.detail_panel = DetailPanel(self, conn=self.conn,
@@ -272,8 +258,7 @@ class FuserApp(ctk.CTk):
             scan_and_sync(self._install_dir, self.conn)
             self._refresh_table()
             dialog.destroy()
-            self.status_bar.set_idle()
-            self.status_bar._lbl.configure(text=f"Install path: {new_path}")
+            self.status_bar.set_message(f"Install path: {new_path}")
 
         btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
         btn_frame.pack(fill="x", pady=(8, 0))
@@ -285,13 +270,6 @@ class FuserApp(ctk.CTk):
         ctk.CTkButton(btn_frame, text="Cancel", width=80,
                        fg_color="#555555", hover_color="#777777",
                        command=dialog.destroy).pack(side="left", padx=6)
-
-    def _on_selection_change(self):
-        count = len(self.song_table.get_selected_songs())
-        self._batch_btn.configure(
-            text=f"Download Selected ({count})",
-            state="normal" if count > 0 else "disabled",
-        )
 
     def _on_select(self, song: dict):
         self.detail_panel.show(song)
@@ -334,92 +312,6 @@ class FuserApp(ctk.CTk):
             self.after(0, self.status_bar.set_idle)
         else:
             self.after(0, lambda: self.status_bar.set_error(result.error_msg or "Unknown error"))
-
-    def _on_batch_download(self):
-        songs = self.song_table.get_selected_songs()
-        # Filter to only uninstalled songs
-        to_download = [s for s in songs if not s.get("pak_path")]
-        if not to_download:
-            self._show_batch_results(
-                [{"song": s, "status": "skipped", "message": "Already installed"}
-                 for s in songs if s.get("pak_path")]
-            )
-            return
-        self._batch_btn.configure(state="disabled", text="Downloading…")
-        threading.Thread(target=self._do_batch_download, args=(to_download,), daemon=True).start()
-
-    def _do_batch_download(self, songs: list[dict]):
-        results: list[dict] = []
-        for i, song in enumerate(songs):
-            # Update status bar
-            self.after(0, lambda s=song, i=i, n=len(songs): self.status_bar._lbl.configure(
-                text=f"[{i+1}/{n}] Downloading: {s['title']}"))
-            # Run download
-            result = download(song["link"])
-            entry = {"song": song, "result": result}
-            if result.status == "ok":
-                install_pairs(result, song["id"], song["artist"], self._install_dir, self.conn)
-                entry["status"] = "ok"
-                entry["message"] = "Installed"
-            elif result.status == "manual":
-                entry["status"] = "manual"
-                entry["message"] = "Manual download required"
-            else:
-                entry["status"] = "error"
-                entry["message"] = result.error_msg or "Unknown error"
-            results.append(entry)
-        self.after(0, lambda: self._refresh_table())
-        self.after(0, lambda: self._show_batch_results(results))
-        self.after(0, lambda: self.status_bar.set_idle())
-
-    def _show_batch_results(self, results: list[dict]):
-        """Show a modal dialog with per-song download results."""
-        ok_count = sum(1 for r in results if r["status"] == "ok")
-        total = len(results)
-
-        dialog = ctk.CTkToplevel(self)
-        dialog.title("Batch Download Results")
-        dialog.geometry("600x400")
-        dialog.transient(self)
-        dialog.grab_set()
-
-        frame = ctk.CTkFrame(dialog)
-        frame.pack(fill="both", expand=True, padx=12, pady=12)
-        frame.grid_columnconfigure(0, weight=1)
-
-        # Header
-        summary_color = "#52b788" if ok_count == total else "#f4a261"
-        ctk.CTkLabel(
-            frame, text=f"Batch Download — {ok_count} of {total} succeeded",
-            font=ctk.CTkFont(weight="bold", size=14),
-            text_color=summary_color,
-        ).grid(row=0, column=0, sticky="w", pady=(0, 8))
-
-        # Scrollable list of results
-        result_frame = ctk.CTkScrollableFrame(frame, height=280)
-        result_frame.grid(row=1, column=0, sticky="nsew")
-        result_frame.grid_columnconfigure(1, weight=1)
-        frame.grid_rowconfigure(1, weight=1)
-
-        for i, entry in enumerate(results):
-            song = entry["song"]
-            status = entry["status"]
-            msg = entry["message"]
-
-            icon = {"ok": "✓", "manual": "⚠", "error": "✗", "skipped": "—"}.get(status, "?")
-            color = {"ok": "#52b788", "manual": "#f4a261",
-                     "error": "#e76f51", "skipped": "#888888"}.get(status, "white")
-
-            ctk.CTkLabel(result_frame, text=icon, text_color=color,
-                          font=ctk.CTkFont(size=13)).grid(row=i, column=0, padx=(0, 6), sticky="w")
-            ctk.CTkLabel(result_frame, text=song.get("title", "?"),
-                          anchor="w").grid(row=i, column=1, sticky="w")
-            ctk.CTkLabel(result_frame, text=msg, text_color="#aaaaaa",
-                          anchor="w").grid(row=i, column=2, sticky="w", padx=(8, 0))
-
-        # Close button
-        ctk.CTkButton(frame, text="Close", width=80,
-                       command=dialog.destroy).grid(row=2, column=0, pady=(8, 0))
 
     def _on_manual_install(self, song: dict, pak_path: Path, sig_path: Path | None):
         install_manual_files(song["id"], song["artist"], pak_path, sig_path, self._install_dir, self.conn)
