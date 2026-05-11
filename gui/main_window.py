@@ -368,6 +368,99 @@ class FuserApp(ctk.CTk):
         self._batch_btn.pack(side="right", padx=(2, 8))
         self._download_btn.configure(text="Download (0)", state="disabled")
 
+    def _on_batch_download(self):
+        songs = self.song_table.get_selected_songs()
+        to_download = [s for s in songs if not s.get("pak_path")]
+        already_installed = [s for s in songs if s.get("pak_path")]
+        if not to_download:
+            self._show_batch_results(
+                [{"song": s, "status": "skipped", "message": "Already installed"}
+                 for s in already_installed]
+            )
+            return
+        self._download_btn.configure(state="disabled", text="Downloading…")
+        threading.Thread(
+            target=self._do_batch_download,
+            args=(to_download, already_installed),
+            daemon=True,
+        ).start()
+
+    def _do_batch_download(self, to_download: list[dict], already_installed: list[dict]):
+        results: list[dict] = [
+            {"song": s, "status": "skipped", "message": "Already installed"}
+            for s in already_installed
+        ]
+        n = len(to_download)
+        for i, song in enumerate(to_download):
+            self.after(0, lambda s=song, idx=i: self.status_bar.set_message(
+                f"[{idx + 1}/{n}] Downloading: {s['title']}"))
+            result = download(song["link"])
+            entry: dict = {"song": song, "result": result}
+            if result.status == "ok":
+                install_pairs(result, song["id"], song["artist"], self._install_dir, self.conn)
+                entry["status"] = "ok"
+                entry["message"] = "Installed"
+            elif result.status == "manual":
+                entry["status"] = "manual"
+                entry["message"] = "Manual download required"
+            else:
+                entry["status"] = "error"
+                entry["message"] = result.error_msg or "Unknown error"
+            results.append(entry)
+        self.after(0, self._refresh_table)
+        self.after(0, lambda: self._show_batch_results(results))
+        self.after(0, self.status_bar.set_idle)
+        self.after(0, self._exit_batch_mode)
+
+    def _show_batch_results(self, results: list[dict]):
+        ok_count = sum(1 for r in results if r["status"] == "ok")
+        total = len(results)
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Batch Download Results")
+        dialog.geometry("600x400")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        frame = ctk.CTkFrame(dialog)
+        frame.pack(fill="both", expand=True, padx=12, pady=12)
+        frame.grid_columnconfigure(0, weight=1)
+
+        summary_color = "#52b788" if ok_count == total else "#f4a261"
+        ctk.CTkLabel(
+            frame,
+            text=f"Batch Download — {ok_count} of {total} succeeded",
+            font=ctk.CTkFont(weight="bold", size=14),
+            text_color=summary_color,
+        ).grid(row=0, column=0, sticky="w", pady=(0, 8))
+
+        result_frame = ctk.CTkScrollableFrame(frame, height=280)
+        result_frame.grid(row=1, column=0, sticky="nsew")
+        result_frame.grid_columnconfigure(1, weight=1)
+        frame.grid_rowconfigure(1, weight=1)
+
+        for i, entry in enumerate(results):
+            song = entry["song"]
+            status = entry["status"]
+            msg = entry["message"]
+            icon = {"ok": "✓", "manual": "⚠", "error": "✗", "skipped": "—"}.get(status, "?")
+            color = {"ok": "#52b788", "manual": "#f4a261",
+                     "error": "#e76f51", "skipped": "#888888"}.get(status, "white")
+            ctk.CTkLabel(
+                result_frame, text=icon, text_color=color,
+                font=ctk.CTkFont(size=13),
+            ).grid(row=i, column=0, padx=(0, 6), sticky="w")
+            ctk.CTkLabel(
+                result_frame, text=song.get("title", "?"), anchor="w",
+            ).grid(row=i, column=1, sticky="w")
+            ctk.CTkLabel(
+                result_frame, text=msg, text_color="#aaaaaa", anchor="w",
+            ).grid(row=i, column=2, sticky="w", padx=(8, 0))
+
+        ctk.CTkButton(
+            frame, text="Close", width=80, command=dialog.destroy,
+        ).grid(row=2, column=0, pady=(8, 0))
+
     # ── Refresh sources ───────────────────────────────────────────────────
     def _start_refresh(self):
         self._refresh_btn.configure(state="disabled", text="Refreshing…")
