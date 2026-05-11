@@ -219,10 +219,9 @@ class FuserApp(ctk.CTk):
         self._filter_changed()
 
     def _open_settings(self):
-        """Open a modal settings dialog to change the install path."""
         dialog = ctk.CTkToplevel(self)
         dialog.title("Settings")
-        dialog.geometry("520x200")
+        dialog.geometry("520x220")
         dialog.resizable(False, False)
         dialog.transient(self)
         dialog.grab_set()
@@ -232,13 +231,11 @@ class FuserApp(ctk.CTk):
 
         ctk.CTkLabel(frame, text="Song Install Directory",
                       font=ctk.CTkFont(weight="bold", size=13)).pack(anchor="w")
-
         ctk.CTkLabel(frame, text="Choose where .pak/.sig files are installed:",
                       text_color="#aaaaaa").pack(anchor="w", pady=(2, 8))
 
         path_var = ctk.StringVar(value=str(self._install_dir))
-        entry = ctk.CTkEntry(frame, textvariable=path_var, width=480)
-        entry.pack(fill="x", pady=(0, 4))
+        ctk.CTkEntry(frame, textvariable=path_var, width=480).pack(fill="x", pady=(0, 4))
 
         def browse():
             chosen = filedialog.askdirectory(
@@ -249,24 +246,63 @@ class FuserApp(ctk.CTk):
             if chosen:
                 path_var.set(chosen)
 
+        def _do_save(new_path):
+            save_btn.configure(state="disabled", text="Saving…")
+
+            def _thread():
+                new_path.mkdir(parents=True, exist_ok=True)
+                set_setting(self.conn, "install_path", str(new_path))
+                self._install_dir = new_path
+                scan_and_sync(self._install_dir, self.conn)
+                self.after(0, self._refresh_table)
+                self.after(0, lambda: self.status_bar.set_message(f"Install path: {new_path}"))
+                self.after(0, dialog.destroy)
+
+            threading.Thread(target=_thread, daemon=True).start()
+
+        def _confirm_mkdir(new_path):
+            confirm = ctk.CTkToplevel(dialog)
+            confirm.title("Create Directory?")
+            confirm.geometry("420x130")
+            confirm.resizable(False, False)
+            confirm.transient(dialog)
+            confirm.grab_set()
+
+            ctk.CTkLabel(
+                confirm,
+                text=f"Directory does not exist:\n{new_path}\n\nCreate it?",
+                justify="left",
+            ).pack(padx=16, pady=(16, 8))
+
+            btn_row = ctk.CTkFrame(confirm, fg_color="transparent")
+            btn_row.pack()
+
+            ctk.CTkButton(
+                btn_row, text="Yes", width=80,
+                command=lambda: (confirm.destroy(), _do_save(new_path)),
+            ).pack(side="left", padx=4)
+            ctk.CTkButton(
+                btn_row, text="No", width=80, fg_color="#555555", hover_color="#777777",
+                command=lambda: (
+                    confirm.destroy(),
+                    save_btn.configure(state="normal", text="Save"),
+                ),
+            ).pack(side="left", padx=4)
+
         def save():
             new_path = Path(path_var.get().strip())
             if not new_path.exists():
-                new_path.mkdir(parents=True, exist_ok=True)
-            set_setting(self.conn, "install_path", str(new_path))
-            self._install_dir = new_path
-            scan_and_sync(self._install_dir, self.conn)
-            self._refresh_table()
-            dialog.destroy()
-            self.status_bar.set_message(f"Install path: {new_path}")
+                _confirm_mkdir(new_path)
+            else:
+                _do_save(new_path)
 
         btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
         btn_frame.pack(fill="x", pady=(8, 0))
 
         ctk.CTkButton(btn_frame, text="Browse…", width=80,
                        command=browse).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(btn_frame, text="Save", width=80,
-                       command=save).pack(side="left", padx=6)
+        save_btn = ctk.CTkButton(btn_frame, text="Save", width=80, command=save)
+        save_btn.pack(side="left", padx=6)
         ctk.CTkButton(btn_frame, text="Cancel", width=80,
                        fg_color="#555555", hover_color="#777777",
                        command=dialog.destroy).pack(side="left", padx=6)
