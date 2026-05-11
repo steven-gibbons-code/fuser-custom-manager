@@ -29,6 +29,7 @@ class FuserApp(ctk.CTk):
         self._total_songs: int = 0
         path_str = get_setting(self.conn, "install_path")
         self._install_dir = Path(path_str) if path_str else DEFAULT_INSTALL_DIR
+        self._batch_mode: bool = False
         scan_and_sync(self._install_dir, self.conn)
         self._build_ui()
         self._refresh_table()
@@ -124,8 +125,28 @@ class FuserApp(ctk.CTk):
                                         command=self._next_page, state="disabled")
         self._next_btn.pack(side="left", padx=6)
 
+        # Batch mode controls — only _batch_btn visible initially
+        self._download_btn = ctk.CTkButton(
+            pbar, text="Download (0)", width=130, fg_color="#1f6e3a",
+            hover_color="#28964a", state="disabled",
+            command=lambda: self._on_batch_download())
+        self._exit_batch_btn = ctk.CTkButton(
+            pbar, text="✕ Exit Batch", width=90, fg_color="#555555",
+            hover_color="#777777", command=lambda: self._exit_batch_mode())
+        self._deselect_all_btn = ctk.CTkButton(
+            pbar, text="Deselect All", width=90, fg_color="#555555",
+            hover_color="#777777", command=lambda: self.song_table.deselect_all())
+        self._select_all_btn = ctk.CTkButton(
+            pbar, text="Select All", width=80, fg_color="#555555",
+            hover_color="#777777", command=lambda: self.song_table.select_all())
+        self._batch_btn = ctk.CTkButton(
+            pbar, text="Batch", width=70, fg_color="#555555",
+            hover_color="#777777", command=self._enter_batch_mode)
+        self._batch_btn.pack(side="right", padx=(2, 8))
+
         # Row 3 — table + detail
-        self.song_table = SongTable(self, on_select=self._on_select)
+        self.song_table = SongTable(self, on_select=self._on_select,
+                                     on_selection_change=self._on_selection_change)
         self.song_table.grid(row=3, column=0, sticky="nsew", padx=(8, 4), pady=8)
 
         self.detail_panel = DetailPanel(self, conn=self.conn,
@@ -313,6 +334,39 @@ class FuserApp(ctk.CTk):
 
     def _on_select(self, song: dict):
         self.detail_panel.show(song)
+
+    def _on_selection_change(self):
+        count = len(self.song_table.get_selected_songs())
+        self._download_btn.configure(
+            text=f"Download ({count})",
+            state="normal" if count > 0 else "disabled",
+        )
+
+    def _enter_batch_mode(self):
+        self._batch_mode = True
+        self.detail_panel.grid_remove()
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=0)
+        self._batch_btn.pack_forget()
+        self._select_all_btn.pack(side="right", padx=2)
+        self._deselect_all_btn.pack(side="right", padx=2)
+        self._exit_batch_btn.pack(side="right", padx=2)
+        self._download_btn.pack(side="right", padx=(2, 8))
+        self.song_table.set_selectmode("extended")
+
+    def _exit_batch_mode(self):
+        self._batch_mode = False
+        self.song_table.deselect_all()
+        self.song_table.set_selectmode("browse")
+        self.detail_panel.grid()
+        self.grid_columnconfigure(0, weight=7)
+        self.grid_columnconfigure(1, weight=3)
+        self._download_btn.pack_forget()
+        self._exit_batch_btn.pack_forget()
+        self._deselect_all_btn.pack_forget()
+        self._select_all_btn.pack_forget()
+        self._batch_btn.pack(side="right", padx=(2, 8))
+        self._download_btn.configure(text="Download (0)", state="disabled")
 
     # ── Refresh sources ───────────────────────────────────────────────────
     def _start_refresh(self):
