@@ -155,7 +155,6 @@ def init_db(path: Path = DB_PATH) -> sqlite3.Connection:
     # Ensure default install path setting exists
     if get_setting(conn, "install_path") is None:
         set_setting(conn, "install_path", str(Path(r"C:\Fuser\Fuser\Content\Paks\custom_songs")))
-    conn.commit()
     return conn
 
 
