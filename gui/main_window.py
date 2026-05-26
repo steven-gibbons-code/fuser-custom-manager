@@ -59,15 +59,16 @@ class FuserApp(QMainWindow):
         self.filter_bar.add_to_toolbar(self._batch_btn)
         root.addWidget(self.filter_bar)
 
+        self._model = SongTableModel()
+        self.song_table = SongTableView()
+        self.song_table.set_model(self._model)
+
         self._batch_bar = self._build_batch_bar()
         self._batch_bar.hide()
         root.addWidget(self._batch_bar)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        self._model = SongTableModel()
-        self.song_table = SongTableView()
-        self.song_table.set_model(self._model)
         self.song_table.selectionModel().selectionChanged.connect(
             self._on_selection_changed
         )
@@ -82,7 +83,7 @@ class FuserApp(QMainWindow):
 
         splitter.setStretchFactor(0, 7)
         splitter.setStretchFactor(1, 3)
-        root.addWidget(splitter)
+        root.addWidget(splitter, stretch=1)
 
         self.status_bar = StatusBar()
         root.addWidget(self.status_bar)
