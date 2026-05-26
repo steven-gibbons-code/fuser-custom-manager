@@ -10,5 +10,3 @@ venv/
 *.swp
 dist/
 build/
-
-docs/

@@ -18,6 +18,9 @@ from gui.status_bar import StatusBar
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
+_RESULT_ICONS = {"ok": "✓", "manual": "⚠", "error": "✗", "skipped": "—"}
+_RESULT_COLORS = {"ok": "#52b788", "manual": "#f4a261", "error": "#e76f51", "skipped": "#888888"}
+
 
 class FuserApp(ctk.CTk):
     def __init__(self):
@@ -33,6 +36,7 @@ class FuserApp(ctk.CTk):
         scan_and_sync(self._install_dir, self.conn)
         self._build_ui()
         self._refresh_table()
+        self._check_dates_stale()
 
     # ── Layout ────────────────────────────────────────────────────────────
     def _build_ui(self):
@@ -129,10 +133,10 @@ class FuserApp(ctk.CTk):
         self._download_btn = ctk.CTkButton(
             pbar, text="Download (0)", width=130, fg_color="#1f6e3a",
             hover_color="#28964a", state="disabled",
-            command=lambda: self._on_batch_download())
+            command=self._on_batch_download)
         self._exit_batch_btn = ctk.CTkButton(
             pbar, text="✕ Exit Batch", width=90, fg_color="#555555",
-            hover_color="#777777", command=lambda: self._exit_batch_mode())
+            hover_color="#777777", command=self._exit_batch_mode)
         self._deselect_all_btn = ctk.CTkButton(
             pbar, text="Deselect All", width=90, fg_color="#555555",
             hover_color="#777777", command=lambda: self.song_table.deselect_all())
@@ -213,6 +217,15 @@ class FuserApp(ctk.CTk):
         self._prev_btn.configure(state="normal" if self._page > 0 else "disabled")
         self._next_btn.configure(
             state="normal" if (self._page + 1) * 100 < self._total_songs else "disabled")
+
+    def _check_dates_stale(self):
+        null_dates = self.conn.execute(
+            "SELECT COUNT(*) FROM songs WHERE submit_date IS NULL"
+        ).fetchone()[0]
+        if null_dates > 0:
+            self.status_bar.set_message(
+                f"{null_dates:,} songs have no date — click Refresh Sources to update."
+            )
 
     def _filter_changed(self):
         self._page = 0
@@ -377,7 +390,8 @@ class FuserApp(ctk.CTk):
         if not to_download:
             self._show_batch_results(
                 [{"song": s, "status": "skipped", "message": "Already installed"}
-                 for s in already_installed]
+                 for s in already_installed],
+                on_close=self._exit_batch_mode,
             )
             return
         self._download_btn.configure(state="disabled", text="Downloading…")
@@ -399,9 +413,13 @@ class FuserApp(ctk.CTk):
             result = download(song["link"])
             entry: dict = {"song": song, "result": result}
             if result.status == "ok":
-                install_pairs(result, song["id"], song["artist"], self._install_dir, self.conn)
-                entry["status"] = "ok"
-                entry["message"] = "Installed"
+                try:
+                    install_pairs(result, song["id"], song["artist"], self._install_dir, self.conn)
+                    entry["status"] = "ok"
+                    entry["message"] = "Installed"
+                except Exception as exc:
+                    entry["status"] = "error"
+                    entry["message"] = str(exc) or "Install failed"
             elif result.status == "manual":
                 entry["status"] = "manual"
                 entry["message"] = "Manual download required"
@@ -444,9 +462,8 @@ class FuserApp(ctk.CTk):
             song = entry["song"]
             status = entry["status"]
             msg = entry["message"]
-            icon = {"ok": "✓", "manual": "⚠", "error": "✗", "skipped": "—"}.get(status, "?")
-            color = {"ok": "#52b788", "manual": "#f4a261",
-                     "error": "#e76f51", "skipped": "#888888"}.get(status, "white")
+            icon = _RESULT_ICONS.get(status, "?")
+            color = _RESULT_COLORS.get(status, "white")
             ctk.CTkLabel(
                 result_frame, text=icon, text_color=color,
                 font=ctk.CTkFont(size=13),
