@@ -27,7 +27,7 @@ def test_refresh_worker_emits_error_on_exception(qtbot):
     assert "network error" in blocker.args[0]
 
 
-def test_download_worker_emits_progress(qtbot):
+def test_download_worker_emits_done_on_ok_status(qtbot):
     conn = MagicMock()
     song = {"id": 1, "title": "Get Lucky", "link": "http://example.com/song",
             "artist": "Daft Punk"}

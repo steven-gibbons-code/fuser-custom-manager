@@ -38,21 +38,24 @@ class DownloadWorker(QThread):
         self._conn = conn
 
     def run(self):
-        result = download(
-            self._song["link"],
-            progress_cb=lambda p: self.progress.emit(p),
-        )
-        if result.status == "ok":
-            try:
-                install_pairs(result, self._song["id"], self._song["artist"],
-                              self._install_dir, self._conn)
-                self.done.emit(self._song["title"])
-            except Exception as exc:
-                self.error.emit(str(exc) or "Install failed")
-        elif result.status == "manual":
-            self.manual.emit(result.raw_url or "")
-        else:
-            self.error.emit(result.error_msg or "Unknown error")
+        try:
+            result = download(
+                self._song["link"],
+                progress_cb=lambda p: self.progress.emit(p),
+            )
+            if result.status == "ok":
+                try:
+                    install_pairs(result, self._song["id"], self._song["artist"],
+                                  self._install_dir, self._conn)
+                    self.done.emit(self._song["title"])
+                except Exception as exc:
+                    self.error.emit(str(exc) or "Install failed")
+            elif result.status == "manual":
+                self.manual.emit(result.raw_url or "")
+            else:
+                self.error.emit(result.error_msg or "Unknown error")
+        except Exception as exc:
+            self.error.emit(str(exc) or type(exc).__name__)
 
 
 class BatchDownloadWorker(QThread):
