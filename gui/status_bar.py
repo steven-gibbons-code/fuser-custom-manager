@@ -9,6 +9,7 @@ class StatusBar(QWidget):
         layout.setContentsMargins(8, 4, 8, 4)
 
         self._lbl = QLabel("Ready")
+        self._lbl.setStyleSheet("color: #666666;")
         layout.addWidget(self._lbl)
         layout.addStretch()
 
@@ -25,6 +26,7 @@ class StatusBar(QWidget):
 
     def start_download(self, title: str):
         self._lbl.setText(f"Downloading: {title}")
+        self._lbl.setStyleSheet("color: #e0e0e0;")
         self._progress.setValue(0)
         self._progress.show()
 
@@ -33,19 +35,23 @@ class StatusBar(QWidget):
 
     def set_done(self, title: str):
         self._lbl.setText(f"Installed: {title}")
+        self._lbl.setStyleSheet("color: #52b788;")
         self._progress.setValue(100)
         self._idle_timer.start(3000)
 
     def set_error(self, msg: str):
         self._lbl.setText(f"Error: {msg}")
+        self._lbl.setStyleSheet("color: #e76f51;")
         self._progress.hide()
 
     def set_idle(self):
         self._idle_timer.stop()
         self._lbl.setText("Ready")
+        self._lbl.setStyleSheet("color: #666666;")
         self._progress.hide()
         self._progress.setValue(0)
 
     def set_message(self, text: str):
         self._lbl.setText(text)
+        self._lbl.setStyleSheet("color: #e0e0e0;")
         self._progress.hide()

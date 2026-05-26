@@ -59,6 +59,14 @@ def test_set_error(qtbot):
     assert not bar._progress.isVisible()
 
 
+def test_set_error_label_color(qtbot):
+    bar = StatusBar()
+    qtbot.addWidget(bar)
+    bar.show()
+    bar.set_error("failed")
+    assert "#e76f51" in bar._lbl.styleSheet()
+
+
 def test_set_idle(qtbot):
     bar = StatusBar()
     qtbot.addWidget(bar)
