@@ -1,89 +1,159 @@
-from tkinter import filedialog
 import webbrowser
 from pathlib import Path
-import sqlite3
-import customtkinter as ctk
+from PySide6.QtWidgets import (
+    QScrollArea, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QPushButton, QFileDialog, QFrame,
+)
+from PySide6.QtCore import Signal, Qt
 
 _FIELDS = [
-    ("artist",        "Artist"),
-    ("title",         "Title"),
-    ("creator",       "Creator"),
-    ("bpm",           "BPM"),
-    ("key",           "Key"),
-    ("genre",         "Genre"),
-    ("year",          "Year"),
-    ("submit_date",   "Date"),
-    ("source",        "Source"),
-    ("de_status",     "DE Status"),
-    ("complete",      "Complete"),
-    ("complete_notes","Notes"),
-    ("origin",        "Origin"),
-    ("stream_opt",    "Stream-Opt"),
+    ("artist",         "Artist"),
+    ("title",          "Title"),
+    ("creator",        "Creator"),
+    ("bpm",            "BPM"),
+    ("key",            "Key"),
+    ("genre",          "Genre"),
+    ("year",           "Year"),
+    ("submit_date",    "Date"),
+    ("source",         "Source"),
+    ("de_status",      "DE Status"),
+    ("complete",       "Complete"),
+    ("complete_notes", "Notes"),
+    ("origin",         "Origin"),
+    ("stream_opt",     "Stream-Opt"),
 ]
 
 
-class DetailPanel(ctk.CTkScrollableFrame):
-    def __init__(self, master, conn: sqlite3.Connection,
-                 on_download=None, on_uninstall=None, on_manual_install=None, **kwargs):
-        super().__init__(master, **kwargs)
-        self._conn = conn
-        self._on_download = on_download
-        self._on_uninstall = on_uninstall
-        self._on_manual_install = on_manual_install
+class DetailPanel(QScrollArea):
+    download_requested = Signal(object)
+    uninstall_requested = Signal(object)
+    manual_install_requested = Signal(object, object, object)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
         self._song: dict | None = None
+        self.setWidgetResizable(True)
+        self.setObjectName("detailPanel")
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._build()
 
     def _build(self):
-        self.grid_columnconfigure(1, weight=1)
-        self._value_labels: dict[str, ctk.CTkLabel] = {}
+        container = QWidget()
+        self.setWidget(container)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(0)
 
-        for i, (field, label) in enumerate(_FIELDS):
-            ctk.CTkLabel(self, text=f"{label}:", anchor="w",
-                          font=ctk.CTkFont(weight="bold")).grid(
-                row=i, column=0, sticky="nw", padx=(10, 4), pady=(4, 0))
-            lbl = ctk.CTkLabel(self, text="—", anchor="w", wraplength=220, justify="left")
-            lbl.grid(row=i, column=1, sticky="w", padx=4, pady=(4, 0))
-            self._value_labels[field] = lbl
+        # Header section
+        header = QFrame()
+        h_layout = QVBoxLayout(header)
+        h_layout.setContentsMargins(0, 0, 0, 12)
+        h_layout.setSpacing(2)
+        self._title_lbl = QLabel("—")
+        self._title_lbl.setStyleSheet("font-size: 16px; font-weight: 600; color: #e8e8e8;")
+        self._title_lbl.setWordWrap(True)
+        self._artist_lbl = QLabel("—")
+        self._artist_lbl.setStyleSheet("font-size: 13px; color: #2563eb; font-weight: 500;")
+        h_layout.addWidget(self._title_lbl)
+        h_layout.addWidget(self._artist_lbl)
+        layout.addWidget(header)
 
-        base = len(_FIELDS)
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet("color: #272727;")
+        layout.addWidget(sep)
 
-        ctk.CTkLabel(self, text="Link:", anchor="w",
-                      font=ctk.CTkFont(weight="bold")).grid(
-            row=base, column=0, sticky="nw", padx=(10, 4), pady=(4, 0))
-        self._link_btn = ctk.CTkButton(self, text="—", anchor="w", width=220,
-                                        fg_color="transparent", text_color="#6ab0f5",
-                                        command=self._open_link)
-        self._link_btn.grid(row=base, column=1, sticky="w", padx=4)
+        # Fields section
+        fields_widget = QWidget()
+        fields_layout = QVBoxLayout(fields_widget)
+        fields_layout.setContentsMargins(0, 8, 0, 8)
+        fields_layout.setSpacing(5)
 
-        self._path_lbl = ctk.CTkLabel(self, text="", anchor="w",
-                                       text_color="#aaaaaa", wraplength=240, justify="left")
-        self._path_lbl.grid(row=base + 1, column=0, columnspan=2, sticky="w", padx=10, pady=(2, 8))
+        self._labels: dict[str, QLabel] = {}
+        for field, label in _FIELDS:
+            if field in ("artist", "title"):
+                continue
+            row = QHBoxLayout()
+            key_lbl = QLabel(f"{label}")
+            key_lbl.setStyleSheet("font-size: 11px; color: #666; min-width: 80px;")
+            key_lbl.setFixedWidth(90)
+            val_lbl = QLabel("—")
+            val_lbl.setStyleSheet("font-size: 12px; color: #c0c0c0;")
+            val_lbl.setWordWrap(True)
+            self._labels[field] = val_lbl
+            row.addWidget(key_lbl)
+            row.addWidget(val_lbl)
+            fields_layout.addLayout(row)
 
-        self._dl_btn = ctk.CTkButton(self, text="Download & Install", command=self._download)
-        self._dl_btn.grid(row=base + 2, column=0, columnspan=2, sticky="ew", padx=10, pady=4)
+        # Also add artist and title to _labels for test access
+        self._labels["artist"] = self._artist_lbl
+        self._labels["title"] = self._title_lbl
 
-        self._mark_btn = ctk.CTkButton(
-            self, text="Mark as Installed (browse .pak…)",
-            fg_color="#3a5a7a", hover_color="#4a7a9a",
-            command=self._browse_manual_install)
-        self._mark_btn.grid(row=base + 3, column=0, columnspan=2, sticky="ew", padx=10, pady=4)
+        # Link row
+        link_row = QHBoxLayout()
+        link_key = QLabel("Link")
+        link_key.setStyleSheet("font-size: 11px; color: #666; min-width: 80px;")
+        link_key.setFixedWidth(90)
+        self._link_btn = QPushButton("—")
+        self._link_btn.setFlat(True)
+        self._link_btn.setStyleSheet("color: #6ab0f5; text-align: left; padding: 0;")
+        self._link_btn.clicked.connect(self._open_link)
+        link_row.addWidget(link_key)
+        link_row.addWidget(self._link_btn)
+        fields_layout.addLayout(link_row)
 
-        self._un_btn = ctk.CTkButton(self, text="Uninstall",
-                                      fg_color="#7d1a1a", hover_color="#a32020",
-                                      command=self._uninstall)
-        self._un_btn.grid(row=base + 4, column=0, columnspan=2, sticky="ew", padx=10, pady=4)
+        self._path_lbl = QLabel("")
+        self._path_lbl.setStyleSheet("font-size: 10px; color: #555; padding-top: 4px;")
+        self._path_lbl.setWordWrap(True)
+        fields_layout.addWidget(self._path_lbl)
 
-        self._manual_lbl = ctk.CTkLabel(
-            self, text="", text_color="#f4a261", wraplength=240, justify="left")
-        self._manual_lbl.grid(row=base + 5, column=0, columnspan=2,
-                               sticky="w", padx=10, pady=(4, 0))
+        layout.addWidget(fields_widget)
+
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.Shape.HLine)
+        sep2.setStyleSheet("color: #242424;")
+        layout.addWidget(sep2)
+
+        # Actions section
+        actions = QWidget()
+        a_layout = QVBoxLayout(actions)
+        a_layout.setContentsMargins(0, 10, 0, 0)
+        a_layout.setSpacing(6)
+
+        self._dl_btn = QPushButton("Download && Install")
+        self._dl_btn.setObjectName("primaryBtn")
+        self._dl_btn.clicked.connect(self._download)
+        a_layout.addWidget(self._dl_btn)
+
+        self._mark_btn = QPushButton("Mark as Installed (browse .pak…)")
+        self._mark_btn.setObjectName("manualBtn")
+        self._mark_btn.clicked.connect(self._browse_manual_install)
+        a_layout.addWidget(self._mark_btn)
+
+        self._un_btn = QPushButton("Uninstall")
+        self._un_btn.setObjectName("dangerBtn")
+        self._un_btn.clicked.connect(self._uninstall)
+        a_layout.addWidget(self._un_btn)
+
+        self._manual_lbl = QLabel("")
+        self._manual_lbl.setObjectName("manualLabel")
+        self._manual_lbl.setWordWrap(True)
+        a_layout.addWidget(self._manual_lbl)
+
+        layout.addWidget(actions)
+        layout.addStretch()
 
         self._sync_buttons()
 
     def show(self, song: dict):
         self._song = song
-        self._manual_lbl.configure(text="")
-        for field, lbl in self._value_labels.items():
+        self._manual_lbl.setText("")
+        self._title_lbl.setText(song.get("title", "—"))
+        self._artist_lbl.setText(song.get("artist", "—"))
+
+        for field, lbl in self._labels.items():
+            if field in ("artist", "title"):
+                continue
             val = song.get(field)
             if field == "stream_opt":
                 text = "Yes" if val else "No"
@@ -91,28 +161,40 @@ class DetailPanel(ctk.CTkScrollableFrame):
                 text = {"D": "Definitive", "C": "Complete"}.get(str(val or ""), str(val or "—"))
             else:
                 text = str(val) if val not in (None, "") else "—"
-            lbl.configure(text=text)
+            lbl.setText(text)
 
         link = song.get("link", "")
-        self._link_btn.configure(text=(link[:38] + "…") if len(link) > 38 else link or "—")
-        self._path_lbl.configure(
-            text=f"Installed: {song['pak_path']}" if song.get("pak_path") else "")
+        self._link_btn.setText((link[:38] + "…") if len(link) > 38 else link or "—")
+        self._path_lbl.setText(
+            f"Installed: {song['pak_path']}" if song.get("pak_path") else "")
         self._sync_buttons()
 
     def show_manual_link(self, url: str):
-        self._manual_lbl.configure(
-            text="Manual download required.\nClick the link above to open in browser.")
+        self._manual_lbl.setText(
+            "Manual download required.\nClick the link above to open in browser.")
+
+    def clear(self):
+        self._song = None
+        self._title_lbl.setText("—")
+        self._artist_lbl.setText("—")
+        for field, lbl in self._labels.items():
+            if field not in ("artist", "title"):
+                lbl.setText("—")
+        self._link_btn.setText("—")
+        self._path_lbl.setText("")
+        self._manual_lbl.setText("")
+        self._sync_buttons()
 
     def _sync_buttons(self):
         if not self._song:
-            self._dl_btn.configure(state="disabled")
-            self._mark_btn.configure(state="disabled")
-            self._un_btn.configure(state="disabled")
+            self._dl_btn.setEnabled(False)
+            self._mark_btn.setEnabled(False)
+            self._un_btn.setEnabled(False)
             return
         installed = bool(self._song.get("pak_path"))
-        self._dl_btn.configure(state="disabled" if installed else "normal")
-        self._mark_btn.configure(state="disabled" if installed else "normal")
-        self._un_btn.configure(state="normal" if installed else "disabled")
+        self._dl_btn.setEnabled(not installed)
+        self._mark_btn.setEnabled(not installed)
+        self._un_btn.setEnabled(installed)
 
     def _open_link(self):
         if self._song:
@@ -121,32 +203,25 @@ class DetailPanel(ctk.CTkScrollableFrame):
                 webbrowser.open(link)
 
     def _download(self):
-        if self._song and self._on_download:
-            self._dl_btn.configure(state="disabled")
-            self._on_download(self._song)
+        if self._song:
+            self._dl_btn.setEnabled(False)
+            self.download_requested.emit(self._song)
 
     def _browse_manual_install(self):
-        if not self._song or not self._on_manual_install:
+        if not self._song:
             return
-        # Hide any previous manual message
-        self._manual_lbl.configure(text="")
-
-        pak_path = filedialog.askopenfilename(
-            title="Select .pak file to install",
-            filetypes=[("PAK files", "*.pak"), ("All files", "*.*")],
-            parent=self.winfo_toplevel(),
+        self._manual_lbl.setText("")
+        pak_path, _ = QFileDialog.getOpenFileName(
+            self, "Select .pak file to install", "",
+            "PAK files (*.pak);;All files (*.*)"
         )
         if not pak_path:
-            return  # user cancelled
-
+            return
         pak = Path(pak_path)
-
-        # Try to find a matching .sig in the same directory
         sig_candidate = pak.with_suffix(".sig")
         sig = sig_candidate if sig_candidate.exists() else None
-
-        self._on_manual_install(self._song, pak, sig)
+        self.manual_install_requested.emit(self._song, pak, sig)
 
     def _uninstall(self):
-        if self._song and self._on_uninstall:
-            self._on_uninstall(self._song)
+        if self._song:
+            self.uninstall_requested.emit(self._song)
