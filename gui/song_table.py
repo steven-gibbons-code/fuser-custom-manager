@@ -13,9 +13,9 @@ NUM_COLS = 6
 _HEADERS = ["", "Title", "Artist", "BPM", "Quality", "Source"]
 
 _QUALITY_COLORS = {
-    "Official":   ("#1d3557", "#74b3f0"),
-    "Definitive": ("#2d2a00", "#fde68a"),
-    "Complete":   ("#1a2e1a", "#86efac"),
+    "Official":   ("#1a1535", "#8b7de8"),
+    "Definitive": ("#252530", "#a0a8b8"),
+    "Complete":   ("#2e2000", "#d4a017"),
     "Other":      ("#2a2a2a", "#888888"),
 }
 

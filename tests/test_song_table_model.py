@@ -98,3 +98,30 @@ def test_reset_replaces_rows(qtbot):
     model.reset([SONGS[0]])
     assert model.rowCount() == 1
     assert model.get_row(0)["title"] == "Get Lucky"
+
+
+from gui.song_table import _QUALITY_COLORS
+
+
+def test_quality_color_complete():
+    bg, fg = _QUALITY_COLORS["Complete"]
+    assert bg == "#2e2000"
+    assert fg == "#d4a017"
+
+
+def test_quality_color_definitive():
+    bg, fg = _QUALITY_COLORS["Definitive"]
+    assert bg == "#252530"
+    assert fg == "#a0a8b8"
+
+
+def test_quality_color_official():
+    bg, fg = _QUALITY_COLORS["Official"]
+    assert bg == "#1a1535"
+    assert fg == "#8b7de8"
+
+
+def test_quality_color_other_unchanged():
+    bg, fg = _QUALITY_COLORS["Other"]
+    assert bg == "#2a2a2a"
+    assert fg == "#888888"
