@@ -6,18 +6,22 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal
 
-from db import get_setting, set_setting
+from db import set_setting
 from installer import scan_and_sync
 
 
 class SettingsDialog(QDialog):
     path_saved = Signal(Path)
+    _accept = Signal()
+    _save_error = Signal(str)
 
     def __init__(self, current_path: Path, conn, parent=None):
         super().__init__(parent)
         self._conn = conn
         self.setWindowTitle("Settings")
         self.setFixedSize(520, 200)
+        self._accept.connect(self.accept)
+        self._save_error.connect(self._on_save_error)
         self._build(current_path)
 
     def _build(self, current_path: Path):
@@ -70,10 +74,18 @@ class SettingsDialog(QDialog):
         self._save_btn.setText("Saving…")
 
         def _thread():
-            new_path.mkdir(parents=True, exist_ok=True)
-            set_setting(self._conn, "install_path", str(new_path))
-            scan_and_sync(new_path, self._conn)
-            self.path_saved.emit(new_path)
-            self.accept()
+            try:
+                new_path.mkdir(parents=True, exist_ok=True)
+                set_setting(self._conn, "install_path", str(new_path))
+                scan_and_sync(new_path, self._conn)
+                self.path_saved.emit(new_path)
+                self._accept.emit()
+            except Exception as exc:
+                self._save_error.emit(str(exc) or "Save failed")
 
         threading.Thread(target=_thread, daemon=True).start()
+
+    def _on_save_error(self, msg: str):
+        self._save_btn.setEnabled(True)
+        self._save_btn.setText("Save")
+        QMessageBox.critical(self, "Save Failed", msg)
