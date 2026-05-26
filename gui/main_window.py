@@ -30,6 +30,11 @@ class FuserApp(QMainWindow):
 
         self.setStyleSheet(APP_STYLE)
 
+        from PySide6.QtGui import QIcon
+        _icon_path = Path(__file__).parent.parent / "assets" / "icon.ico"
+        if _icon_path.exists():
+            self.setWindowIcon(QIcon(str(_icon_path)))
+
         self.conn: sqlite3.Connection = init_db()
         path_str = get_setting(self.conn, "install_path")
         self._install_dir = Path(path_str) if path_str else DEFAULT_INSTALL_DIR
