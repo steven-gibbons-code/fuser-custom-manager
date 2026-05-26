@@ -1,5 +1,5 @@
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QRect, QRectF
-from PySide6.QtWidgets import QTableView, QStyledItemDelegate, QAbstractItemView, QStyle
+from PySide6.QtWidgets import QTableView, QStyledItemDelegate, QAbstractItemView, QStyle, QHeaderView
 from PySide6.QtGui import QPainter, QColor, QFont, QBrush
 
 COL_INSTALLED = 0
@@ -153,6 +153,7 @@ class SongTableView(QTableView):
         self.setColumnWidth(COL_QUALITY, 100)
         self.setColumnWidth(COL_SOURCE, 110)
         self.horizontalHeader().setStretchLastSection(False)
+        self.horizontalHeader().setSectionResizeMode(COL_TITLE, QHeaderView.ResizeMode.Stretch)
         self.setColumnWidth(COL_ARTIST, 160)
 
     def get_selected_songs(self) -> list[dict]:

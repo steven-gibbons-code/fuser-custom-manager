@@ -164,7 +164,7 @@ class FuserApp(QMainWindow):
         self.song_table.set_batch_mode(False)
         self._batch_bar.hide()
         self._batch_btn.show()
-        self.detail_panel.show()
+        self.detail_panel.setVisible(True)
         self._download_btn.setText("Download (0)")
         self._download_btn.setEnabled(False)
 
