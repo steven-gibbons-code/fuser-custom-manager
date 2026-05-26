@@ -214,7 +214,7 @@ def get_songs(conn: sqlite3.Connection, filters: dict) -> list[dict]:
         FROM songs s
         LEFT JOIN installed i ON i.song_id = s.id
         WHERE {' AND '.join(where)}
-        ORDER BY {order} {direction}
+        ORDER BY {order} {direction}, s.id DESC
         LIMIT 100 OFFSET ?
     """
     params.append(offset)

@@ -52,6 +52,36 @@ def _is_ref_error(val: str) -> bool:
     return bool(val and val.startswith("#"))
 
 
+def _parse_submit_date(val: str) -> str | None:
+    """Normalize date strings to YYYY-MM-DD for correct text sort.
+
+    Handles:
+      YYYY/MM/DD  (column AD "Date")
+      DD/MM/YYYY or D/M/YYYY with optional HH:MM:SS  (column Q "Submit Date")
+    """
+    if not val:
+        return None
+    date_part = val.split(" ")[0]
+    parts = date_part.split("/")
+    if len(parts) != 3:
+        return None
+    try:
+        a, b, c = int(parts[0]), int(parts[1]), int(parts[2])
+    except ValueError:
+        return None
+    if a > 31:
+        # YYYY/MM/DD
+        year, month, day = a, b, c
+    else:
+        # DD/MM/YYYY
+        day, month, year = a, b, c
+    try:
+        date(year, month, day)  # rejects impossible dates (e.g. Feb 30)
+    except ValueError:
+        return None
+    return f"{year:04d}-{month:02d}-{day:02d}"
+
+
 def normalise_row(row: dict, source: str) -> dict | None:
     h = list(row.keys())
     raw_link = row.get(_find(h, "Link") or "", "").strip()
@@ -91,6 +121,7 @@ def normalise_row(row: dict, source: str) -> dict | None:
     disc3_col    = _find(h, "Disc 3", "Disc 3 ")
     disc4_col    = _find(h, "Disc 4", "Disc 4 ")
     download_col = _find(h, "Download")
+    date_col        = _find(h, "Date")
     submit_date_col = _find(h, "Submit Date")
 
     de_val = row.get(de_col or "", "").strip()
@@ -120,7 +151,10 @@ def normalise_row(row: dict, source: str) -> dict | None:
         "disc3":          row.get(disc3_col  or "", "").strip() or None,
         "disc4":          row.get(disc4_col  or "", "").strip() or None,
         "download_type":  row.get(download_col or "", "").strip() or None,
-        "submit_date":    row.get(submit_date_col or "", "").strip() or None,
+        "submit_date":    (
+            _parse_submit_date(row.get(date_col or "", "").strip())
+            or _parse_submit_date(row.get(submit_date_col or "", "").strip())
+        ),
         "link":           link,
         "link_host":      detect_link_host(link),
         "last_seen":      date.today().isoformat(),
