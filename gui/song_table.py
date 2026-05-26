@@ -1,137 +1,176 @@
-import tkinter.font as tkfont
-import customtkinter as ctk
-from tkinter import ttk
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
+from PySide6.QtWidgets import QTableView, QStyledItemDelegate, QAbstractItemView, QStyle
+from PySide6.QtGui import QPainter, QColor, QFont, QBrush
+
+COL_INSTALLED = 0
+COL_TITLE = 1
+COL_ARTIST = 2
+COL_BPM = 3
+COL_QUALITY = 4
+COL_SOURCE = 5
+NUM_COLS = 6
+
+_HEADERS = ["", "Title", "Artist", "BPM", "Quality", "Source"]
 
 _QUALITY_COLORS = {
-    "Official":   "#bb86fc",  # purple
-    "Definitive": "#e8e8e8",  # platinum/silver
-    "Complete":   "#ffd700",  # gold
-    "Other":      "#888888",  # dim gray
+    "Official":   ("#1d3557", "#74b3f0"),
+    "Definitive": ("#2d2a00", "#fde68a"),
+    "Complete":   ("#1a2e1a", "#86efac"),
+    "Other":      ("#2a2a2a", "#888888"),
 }
-_QUALITY_ABBR = {"Official": "Off", "Definitive": "Def", "Complete": "Cmp"}
-
-COLUMNS = [
-    ("status",  "Status",  25),
-    ("quality", "Quality", 35),
-    ("artist",  "Artist",  150),
-    ("title",   "Title",   220),
-    ("creator", "Creator", 80),
-    ("bpm",     "BPM",     30),
-    ("key",     "Key",     90),
-    ("genre",   "Genre",   100),
-    ("year",    "Year",    50),
-    ("source",  "Source",  95),
-]
 
 
-class SongTable(ctk.CTkFrame):
-    def __init__(self, master, on_select=None, on_selection_change=None, **kwargs):
-        super().__init__(master, **kwargs)
-        self._on_select = on_select
-        self._on_selection_change = on_selection_change
+class SongTableModel(QAbstractTableModel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
         self._rows: list[dict] = []
-        self._sort_col = "artist"
-        self._sort_asc = True
-        self._build()
 
-    def _build(self):
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
-
-        style = ttk.Style()
-        style.theme_use("clam")
-        base_font = tkfont.nametofont("TkDefaultFont")
-        base_font.configure(size=15)
-        table_font = (base_font.actual("family"), 15)
-        bold_font = (base_font.actual("family"), 15, "bold")
-
-        style.configure("Treeview", background="#2b2b2b", foreground="white",
-                         fieldbackground="#2b2b2b", rowheight=28, font=table_font)
-        style.configure("Treeview.Heading", background="#1f538d",
-                         foreground="white", font=bold_font)
-        style.map("Treeview", background=[("selected", "#1f538d")])
-
-        cols = [c[0] for c in COLUMNS]
-        self._tree = ttk.Treeview(self, columns=cols, show="headings", selectmode="browse")
-        for col_id, label, width in COLUMNS:
-            self._tree.heading(col_id, text=label,
-                                command=lambda c=col_id: self._toggle_sort(c))
-            self._tree.column(col_id, width=width, minwidth=40)
-
-        vsb = ttk.Scrollbar(self, orient="vertical", command=self._tree.yview)
-        self._tree.configure(yscrollcommand=vsb.set)
-        self._tree.grid(row=0, column=0, sticky="nsew")
-        vsb.grid(row=0, column=1, sticky="ns")
-
-        self._tree.tag_configure("installed", background="#1a3a2a")
-        self._tree.tag_configure("altrow", background="#353535")
-        for tier, color in _QUALITY_COLORS.items():
-            self._tree.tag_configure(f"q_{tier}", foreground=color)
-        self._tree.bind("<<TreeviewSelect>>", self._on_tree_select)
-
-    def load(self, rows: list[dict]):
+    def reset(self, rows: list[dict]):
+        self.beginResetModel()
         self._rows = rows
-        self._tree.delete(*self._tree.get_children())
-        for i, r in enumerate(rows):
-            values = (
-                "✓" if r.get("pak_path") else "",
-                _QUALITY_ABBR.get(r.get("quality", ""), ""),
-                r.get("artist", ""),
-                r.get("title", ""),
-                r.get("creator", ""),
-                r.get("bpm", ""),
-                r.get("key", ""),
-                r.get("genre", ""),
-                r.get("year", ""),
-                r.get("source", ""),
-            )
-            quality_key = r.get("quality", "")
-            color_tag = f"q_{quality_key}" if quality_key in _QUALITY_COLORS else ""
-            installed_tag = "installed" if r.get("pak_path") else ""
-            # Stack tags: altrow bg first so installed bg overrides it
-            tags = []
-            if i % 2 == 1:
-                tags.append("altrow")
-            if installed_tag:
-                tags.append(installed_tag)
-            if color_tag:
-                tags.append(color_tag)
-            self._tree.insert("", "end", iid=str(r["id"]), values=values, tags=tuple(tags))
+        self.endResetModel()
 
-    def _toggle_sort(self, col: str):
-        if self._sort_col == col:
-            self._sort_asc = not self._sort_asc
+    def get_row(self, index: int) -> dict:
+        return self._rows[index]
+
+    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
+        return len(self._rows)
+
+    def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:
+        return NUM_COLS
+
+    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):
+        if not index.isValid() or index.row() >= len(self._rows):
+            return None
+        row = self._rows[index.row()]
+        col = index.column()
+
+        if role == Qt.ItemDataRole.UserRole:
+            return row
+
+        if role == Qt.ItemDataRole.DisplayRole:
+            if col == COL_INSTALLED:
+                return None
+            if col == COL_TITLE:
+                return row.get("title", "")
+            if col == COL_ARTIST:
+                return row.get("artist", "")
+            if col == COL_BPM:
+                bpm = row.get("bpm")
+                return str(bpm) if bpm else ""
+            if col == COL_QUALITY:
+                return row.get("quality", "")
+            if col == COL_SOURCE:
+                return row.get("source", "")
+
+        if role == Qt.ItemDataRole.BackgroundRole:
+            if row.get("pak_path") and col != COL_INSTALLED:
+                return QBrush(QColor("#1a2e1a"))
+
+        return None
+
+    def headerData(self, section: int, orientation: Qt.Orientation,
+                   role: int = Qt.ItemDataRole.DisplayRole):
+        if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
+            return _HEADERS[section]
+        return None
+
+
+class InstallDelegate(QStyledItemDelegate):
+    def paint(self, painter: QPainter, option, index: QModelIndex):
+        from PySide6.QtCore import QRect
+        song = index.data(Qt.ItemDataRole.UserRole)
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.fillRect(option.rect, QColor("#1e3a5f"))
         else:
-            self._sort_col, self._sort_asc = col, True
-        self._rows.sort(key=lambda r: (r.get(col) or ""), reverse=not self._sort_asc)
-        self.load(self._rows)
+            painter.fillRect(option.rect, QColor("#1c1c1c"))
+        installed = bool(song.get("pak_path")) if song else False
+        cx = option.rect.center().x()
+        cy = option.rect.center().y()
+        radius = 4
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        if installed:
+            painter.setBrush(QColor("#22c55e"))
+        else:
+            painter.setBrush(QColor("#3a3a3a"))
+        painter.drawEllipse(cx - radius, cy - radius, radius * 2, radius * 2)
+        painter.restore()
 
-    def set_selectmode(self, mode: str):
-        if mode not in ("browse", "extended", "none"):
-            raise ValueError(f"Invalid selectmode: {mode!r}")
-        self._tree.configure(selectmode=mode)
+
+class QualityDelegate(QStyledItemDelegate):
+    def paint(self, painter: QPainter, option, index: QModelIndex):
+        from PySide6.QtCore import QRectF, QRect
+        quality = index.data(Qt.ItemDataRole.DisplayRole) or ""
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.fillRect(option.rect, QColor("#1e3a5f"))
+        else:
+            bg = index.data(Qt.ItemDataRole.BackgroundRole)
+            if bg:
+                painter.fillRect(option.rect, bg)
+            else:
+                painter.fillRect(option.rect, QColor("#1c1c1c"))
+        if not quality:
+            return
+        bg_hex, fg_hex = _QUALITY_COLORS.get(quality, ("#2a2a2a", "#888888"))
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        fm = painter.fontMetrics()
+        text_width = fm.horizontalAdvance(quality)
+        badge_h = option.rect.height() - 8
+        badge_w = text_width + 12
+        bx = option.rect.x() + 4
+        by = option.rect.y() + 4
+        painter.setBrush(QColor(bg_hex))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(QRectF(bx, by, badge_w, badge_h), 3, 3)
+        painter.setPen(QColor(fg_hex))
+        f = QFont(painter.font())
+        f.setPointSize(10)
+        f.setBold(True)
+        painter.setFont(f)
+        painter.drawText(QRect(bx, by, badge_w, badge_h), Qt.AlignmentFlag.AlignCenter, quality)
+        painter.restore()
+
+
+class SongTableView(QTableView):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAlternatingRowColors(True)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.setShowGrid(False)
+        self.verticalHeader().hide()
+        self.horizontalHeader().setStretchLastSection(True)
+        self.setWordWrap(False)
+        self.verticalHeader().setDefaultSectionSize(28)
+
+    def set_model(self, model: SongTableModel):
+        self.setModel(model)
+        self.setItemDelegateForColumn(COL_INSTALLED, InstallDelegate(self))
+        self.setItemDelegateForColumn(COL_QUALITY, QualityDelegate(self))
+        self.setColumnWidth(COL_INSTALLED, 28)
+        self.setColumnWidth(COL_BPM, 60)
+        self.setColumnWidth(COL_QUALITY, 100)
+        self.setColumnWidth(COL_SOURCE, 110)
+        self.horizontalHeader().setStretchLastSection(False)
+        self.setColumnWidth(COL_ARTIST, 160)
 
     def get_selected_songs(self) -> list[dict]:
-        sel_ids = set(self._tree.selection())
-        return [r for r in self._rows if str(r["id"]) in sel_ids]
+        m = self.model()
+        if m is None:
+            return []
+        return [m.get_row(idx.row()) for idx in self.selectionModel().selectedRows()]
 
     def select_all(self):
-        for r in self._rows:
-            self._tree.selection_add(str(r["id"]))
-        if self._on_selection_change:
-            self._on_selection_change()
+        self.selectAll()
 
     def deselect_all(self):
-        self._tree.selection_set([])
-        if self._on_selection_change:
-            self._on_selection_change()
+        self.clearSelection()
 
-    def _on_tree_select(self, _event):
-        sel = self._tree.selection()
-        if self._on_selection_change:
-            self._on_selection_change()
-        if not sel or not self._on_select:
-            return
-        song = next((r for r in self._rows if str(r["id"]) == sel[-1]), None)
-        if song:
-            self._on_select(song)
+    def set_batch_mode(self, enabled: bool):
+        if enabled:
+            self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        else:
+            self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
