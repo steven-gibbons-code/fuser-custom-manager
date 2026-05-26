@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QSplitter, QPushButton, QFrame, QLabel,
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 
 from db import init_db, get_songs, get_song_by_id, get_setting, set_setting
 from installer import scan_and_sync, uninstall, install_manual_files, DEFAULT_INSTALL_DIR
@@ -30,7 +31,6 @@ class FuserApp(QMainWindow):
 
         self.setStyleSheet(APP_STYLE)
 
-        from PySide6.QtGui import QIcon
         _icon_path = Path(__file__).parent.parent / "assets" / "icon.ico"
         if _icon_path.exists():
             self.setWindowIcon(QIcon(str(_icon_path)))

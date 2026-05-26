@@ -7,7 +7,6 @@ OUT = Path(__file__).parent / "icon.ico"
 
 BG_DARK   = (28, 28, 28, 255)
 BLUE      = (37, 99, 235, 255)
-WHITE     = (220, 220, 220, 255)
 
 
 def _draw_frame(size: int) -> Image.Image:
