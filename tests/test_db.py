@@ -235,3 +235,13 @@ def test_init_db_does_not_overwrite_existing_setting(tmp_path):
     c.close()
     c2 = init_db(tmp_path / "fresh.db")
     assert get_setting(c2, "install_path") == r"C:\custom\path"
+
+def test_get_songs_no_limit_returns_all(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    songs = [
+        {**SONG, "title": f"Song {i}", "link": f"https://drive.google.com/file/d/{i}"}
+        for i in range(110)
+    ]
+    upsert_songs(conn, songs)
+    rows = get_songs(conn, {}, limit=0)
+    assert len(rows) == 110
