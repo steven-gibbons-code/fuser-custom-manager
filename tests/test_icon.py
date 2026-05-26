@@ -16,3 +16,15 @@ def test_icon_is_valid_ico():
         pytest.skip("icon not generated yet")
     img = Image.open(icon_path)
     assert img.format == "ICO"
+
+
+def test_icon_contains_three_sizes():
+    import struct, pytest
+    icon_path = Path(__file__).parent.parent / "assets" / "icon.ico"
+    if not icon_path.exists():
+        pytest.skip("icon not generated yet")
+    with open(icon_path, "rb") as f:
+        data = f.read()
+    # ICO header: 2 bytes reserved, 2 bytes type (1=ICO), 2 bytes count
+    _reserved, _ico_type, num_images = struct.unpack("<HHH", data[:6])
+    assert num_images == 3, f"ICO should contain 16/32/48px, got {num_images} image(s)"

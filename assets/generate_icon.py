@@ -1,6 +1,6 @@
 """Generate assets/icon.ico — run once: python assets/generate_icon.py"""
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 SIZES = [16, 32, 48]
 OUT = Path(__file__).parent / "icon.ico"
@@ -41,9 +41,9 @@ def _draw_frame(size: int) -> Image.Image:
 
 
 def main():
-    frames = [_draw_frame(sz) for sz in SIZES]
-    frames[0].save(OUT, format="ICO", sizes=[(sz, sz) for sz in SIZES],
-                   append_images=frames[1:])
+    # Draw the largest frame; Pillow will rescale it to the other sizes
+    base = _draw_frame(48)
+    base.save(OUT, format="ICO", sizes=[(16, 16), (32, 32), (48, 48)])
     print(f"Written: {OUT}  ({', '.join(str(s)+'px' for s in SIZES)})")
 
 
