@@ -65,7 +65,7 @@ class SongTableModel(QAbstractTableModel):
 
         if role == Qt.ItemDataRole.BackgroundRole:
             if row.get("pak_path") and col != COL_INSTALLED:
-                return QBrush(QColor("#1a2e1a"))
+                return QBrush(QColor("#152215"))
 
         return None
 
@@ -82,7 +82,8 @@ class InstallDelegate(QStyledItemDelegate):
         if option.state & QStyle.StateFlag.State_Selected:
             painter.fillRect(option.rect, QColor("#1e3a5f"))
         else:
-            painter.fillRect(option.rect, QColor("#1c1c1c"))
+            bg = index.data(Qt.ItemDataRole.BackgroundRole)
+            painter.fillRect(option.rect, bg.color() if bg else QColor("#1c1c1c"))
         installed = bool(song.get("pak_path")) if song else False
         cx = option.rect.center().x()
         cy = option.rect.center().y()
@@ -132,6 +133,19 @@ class QualityDelegate(QStyledItemDelegate):
         painter.restore()
 
 
+class _RowBgDelegate(QStyledItemDelegate):
+    """Applies model BackgroundRole to columns using Qt's default text rendering.
+
+    Without this, QSS alternate-background-color overrides BackgroundRole
+    for cells that don't have a custom delegate.
+    """
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        bg = index.data(Qt.ItemDataRole.BackgroundRole)
+        if bg:
+            option.backgroundBrush = bg
+
+
 class SongTableView(QTableView):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -148,6 +162,10 @@ class SongTableView(QTableView):
         self.setModel(model)
         self.setItemDelegateForColumn(COL_INSTALLED, InstallDelegate(self))
         self.setItemDelegateForColumn(COL_QUALITY, QualityDelegate(self))
+        self.setItemDelegateForColumn(COL_TITLE, _RowBgDelegate(self))
+        self.setItemDelegateForColumn(COL_ARTIST, _RowBgDelegate(self))
+        self.setItemDelegateForColumn(COL_BPM, _RowBgDelegate(self))
+        self.setItemDelegateForColumn(COL_SOURCE, _RowBgDelegate(self))
         self.setColumnWidth(COL_INSTALLED, 28)
         self.setColumnWidth(COL_BPM, 60)
         self.setColumnWidth(COL_QUALITY, 100)

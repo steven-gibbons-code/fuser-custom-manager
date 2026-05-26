@@ -125,3 +125,37 @@ def test_quality_color_other_unchanged():
     bg, fg = _QUALITY_COLORS["Other"]
     assert bg == "#2a2a2a"
     assert fg == "#888888"
+
+
+def test_background_role_installed_row_is_dark_green(qtbot):
+    model = SongTableModel()
+    model.reset([{
+        "id": 1, "title": "T", "artist": "A", "bpm": 120,
+        "quality": "Complete", "source": "s", "pak_path": "/foo.pak",
+    }])
+    idx = model.index(0, COL_TITLE)
+    brush = model.data(idx, Qt.ItemDataRole.BackgroundRole)
+    assert brush is not None
+    assert brush.color().name() == "#152215"
+
+
+def test_background_role_uninstalled_row_is_none(qtbot):
+    model = SongTableModel()
+    model.reset([{
+        "id": 2, "title": "T", "artist": "A", "bpm": 120,
+        "quality": "Complete", "source": "s", "pak_path": None,
+    }])
+    idx = model.index(0, COL_TITLE)
+    brush = model.data(idx, Qt.ItemDataRole.BackgroundRole)
+    assert brush is None
+
+
+def test_background_role_not_set_for_installed_column(qtbot):
+    model = SongTableModel()
+    model.reset([{
+        "id": 1, "title": "T", "artist": "A", "bpm": 120,
+        "quality": "Complete", "source": "s", "pak_path": "/foo.pak",
+    }])
+    idx = model.index(0, COL_INSTALLED)
+    brush = model.data(idx, Qt.ItemDataRole.BackgroundRole)
+    assert brush is None
