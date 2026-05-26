@@ -1,4 +1,4 @@
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QRect, QRectF
 from PySide6.QtWidgets import QTableView, QStyledItemDelegate, QAbstractItemView, QStyle
 from PySide6.QtGui import QPainter, QColor, QFont, QBrush
 
@@ -78,7 +78,6 @@ class SongTableModel(QAbstractTableModel):
 
 class InstallDelegate(QStyledItemDelegate):
     def paint(self, painter: QPainter, option, index: QModelIndex):
-        from PySide6.QtCore import QRect
         song = index.data(Qt.ItemDataRole.UserRole)
         if option.state & QStyle.StateFlag.State_Selected:
             painter.fillRect(option.rect, QColor("#1e3a5f"))
@@ -101,7 +100,6 @@ class InstallDelegate(QStyledItemDelegate):
 
 class QualityDelegate(QStyledItemDelegate):
     def paint(self, painter: QPainter, option, index: QModelIndex):
-        from PySide6.QtCore import QRectF, QRect
         quality = index.data(Qt.ItemDataRole.DisplayRole) or ""
         if option.state & QStyle.StateFlag.State_Selected:
             painter.fillRect(option.rect, QColor("#1e3a5f"))
