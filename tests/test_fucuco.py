@@ -157,7 +157,7 @@ def test_normalise_includes_submit_date():
         "Link": "https://drive.google.com/file/d/abc",
     }
     r = normalise_row(row, "fucuco_main")
-    assert r["submit_date"] == "2023/05/01"
+    assert r["submit_date"] == "2023-05-01"
 
 def test_normalise_submit_date_blank_is_none():
     row = {
