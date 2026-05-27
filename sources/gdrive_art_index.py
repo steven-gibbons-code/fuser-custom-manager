@@ -21,18 +21,13 @@ Each ``entry`` is an array where:
     entry[2]  – name (str)
     entry[3]  – MIME type (str)
 
-``build_index`` takes the HTML of a single folder page and returns a mapping
-``{artist_name_lower: {files: [{id, name}]}}``.  It works by:
-  1. Parsing all entries out of ``_DRIVE_ivd``.
-  2. Treating entries whose MIME is ``application/vnd.google-apps.folder`` as
-     artist folders.
-  3. Treating entries whose MIME starts with ``image/`` (or whose extension is a
-     known image extension) as image files.
-  4. Matching image files to artist folders via the parent-ID field (entry[1][0]).
+``build_index`` performs a 2-level crawl:
+  1. Fetches the root folder page → finds letter folder entries (A, B, C...)
+  2. For each letter folder, fetches that page → finds artist folder entries
+  Returns ``{artist_name_lower: {folder_id: ..., files: []}}``.
 
-This design allows both a real multi-request build (fetch letter folder → get
-artist folders + their image children) and a single-HTML test path where the
-mock HTML contains both folder and file entries together.
+``lookup`` fetches the artist folder on demand (one extra request per artist,
+cached after the first call) and returns a direct download URL for the first image.
 """
 
 import json
@@ -144,56 +139,31 @@ def _is_image(entry: dict) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# HTTP helpers
 # ---------------------------------------------------------------------------
 
-def build_index(folder_id: str, html: str | None = None) -> dict:
-    """Return ``{artist_name_lower: {files: [{id, name}]}}`` for a GDrive folder.
+def _fetch_folder(folder_id: str) -> str:
+    """Fetch the HTML of a GDrive folder page."""
+    resp = requests.get(
+        f"https://drive.google.com/drive/folders/{folder_id}",
+        headers={"User-Agent": "Mozilla/5.0"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.text
 
-    Pass ``html`` directly in tests; ``None`` triggers a real HTTP fetch of
-    ``folder_id``.
 
-    The function parses a single folder page.  It expects the page to contain
-    both artist-folder entries and their child image-file entries in the same
-    ``_DRIVE_ivd`` blob (as produced by the real GDrive UI when the folder
-    view embeds all visible items), or as constructed in test fixtures.
+# ---------------------------------------------------------------------------
+# Index persistence
+# ---------------------------------------------------------------------------
 
-    Artist folders are identified by ``mime == application/vnd.google-apps.folder``.
-    Image files are matched to their parent artist folder via ``entry[1][0]``
-    (the parent ID field).
-    """
-    if html is None:
-        resp = requests.get(
-            f"https://drive.google.com/drive/folders/{folder_id}",
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        html = resp.text
-
-    entries = _parse_html(html)
-
-    # Build lookup: folder_id → artist name
-    artist_by_id: dict[str, str] = {}
-    for e in entries:
-        if e["mime"] == _FOLDER_MIME:
-            artist_by_id[e["id"]] = e["name"].strip()
-
-    # Collect images grouped by parent folder ID
-    images_by_parent: dict[str, list[dict]] = {}
-    for e in entries:
-        if _is_image(e) and e["parent_id"]:
-            images_by_parent.setdefault(e["parent_id"], []).append(
-                {"id": e["id"], "name": e["name"]}
-            )
-
-    index: dict[str, dict] = {}
-    for fid, artist_name in artist_by_id.items():
-        images = images_by_parent.get(fid, [])
-        if images:
-            index[artist_name.lower()] = {"files": images}
-
-    return index
+def _save_index(index: dict) -> None:
+    """Persist the index to disk."""
+    _INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _INDEX_PATH.write_text(
+        json.dumps({"ts": time.time(), "index": index}),
+        encoding="utf-8",
+    )
 
 
 def _load_index() -> dict:
@@ -207,11 +177,43 @@ def _load_index() -> dict:
             pass
 
     index = build_index(FOLDER_ID)
-    _INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _INDEX_PATH.write_text(
-        json.dumps({"ts": time.time(), "index": index}),
-        encoding="utf-8",
-    )
+    _save_index(index)
+    return index
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+def build_index(folder_id: str, html: str | None = None) -> dict:
+    """Build ``{artist_lower: {folder_id, files: []}}`` by crawling root + letter folders.
+
+    Pass ``html`` directly in tests to supply the root page; real builds pass
+    ``None`` to trigger HTTP fetches.
+
+    The crawl is 2 levels deep:
+      1. Parse the root page → find letter folder entries (A, B, C...).
+      2. For each letter folder, fetch that page → find artist folder entries.
+
+    ``files`` is left empty; it is populated lazily by ``lookup`` on first use.
+    """
+    if html is None:
+        html = _fetch_folder(folder_id)
+
+    root_entries = _parse_html(html)
+    letter_folder_ids = [e["id"] for e in root_entries if e.get("mime") == _FOLDER_MIME]
+
+    index: dict[str, dict] = {}
+    for lf_id in letter_folder_ids:
+        try:
+            lf_html = _fetch_folder(lf_id)
+            artist_entries = _parse_html(lf_html)
+            for entry in artist_entries:
+                if entry.get("mime") == _FOLDER_MIME:
+                    key = entry["name"].strip().lower()
+                    index[key] = {"folder_id": entry["id"], "files": []}
+        except Exception:
+            continue
     return index
 
 
@@ -221,11 +223,29 @@ def get_index() -> dict:
 
 
 def lookup(artist: str) -> str | None:
-    """Return a direct download URL for the first image matching *artist*, or None."""
+    """Return a direct download URL for the first image matching *artist*, or None.
+
+    On first call for an artist, fetches the artist's GDrive folder to populate
+    ``files``; the result is cached to disk so subsequent calls are free.
+    """
     key = artist.strip().lower()
     index = _load_index()
     entry = index.get(key)
-    if not entry or not entry.get("files"):
+    if not entry:
+        return None
+
+    if not entry.get("files"):
+        # Fetch artist folder on demand to get image list
+        try:
+            html = _fetch_folder(entry["folder_id"])
+            all_entries = _parse_html(html)
+            images = [e for e in all_entries if _is_image(e)]
+            entry["files"] = [{"id": e["id"], "name": e["name"]} for e in images]
+            _save_index(index)
+        except Exception:
+            return None
+
+    if not entry["files"]:
         return None
     file_id = entry["files"][0]["id"]
     return f"https://drive.google.com/uc?id={file_id}&export=download"
