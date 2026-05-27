@@ -15,6 +15,10 @@ QWidget {{
     font-size: 14px;
 }}
 
+/* Prevent the broad QWidget rule from flattening interactive widgets via
+   equal-specificity tie-breaking — explicit background on each widget type
+   below this point is what wins, not this rule. */
+
 /* ── Toolbar / filter frames ── */
 QFrame#toolbar, QFrame#filterbar, QFrame#batchbar {{
     background: rgba(10, 4, 32, 0.5);
@@ -97,53 +101,65 @@ QPushButton#primaryBtn {{
     background: {fuser};
     color: white;
     border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 22px;
 }}
 QPushButton#primaryBtn:hover {{
     background: {fuser};
     border-color: rgba(255,255,255,0.2);
+    border-radius: 22px;
 }}
 QPushButton#primaryBtn:disabled {{
     background: {surface_1};
     color: {fg_disabled};
+    border-radius: 22px;
 }}
 
 QPushButton#downloadBtn {{
     background: transparent;
     color: {success};
     border: 1px solid rgba(74,209,92,0.4);
+    border-radius: 22px;
 }}
 QPushButton#downloadBtn:hover {{
     background: rgba(74,209,92,0.1);
+    border-radius: 22px;
 }}
 QPushButton#downloadBtn:disabled {{
     color: {fg_disabled};
     border-color: rgba(255,255,255,0.04);
+    border-radius: 22px;
 }}
 
 QPushButton#dangerBtn {{
     background: transparent;
     color: {danger};
     border: 1px solid rgba(239,83,80,0.4);
+    border-radius: 22px;
 }}
 QPushButton#dangerBtn:hover {{
     background: rgba(239,83,80,0.1);
+    border-radius: 22px;
 }}
 QPushButton#dangerBtn:disabled {{
     color: {fg_disabled};
     border-color: rgba(255,255,255,0.04);
+    border-radius: 22px;
 }}
 
 QPushButton#manualBtn {{
     background: transparent;
     color: {warning};
     border: 1px solid rgba(255,184,77,0.4);
+    border-radius: 22px;
 }}
 QPushButton#manualBtn:hover {{
     background: rgba(255,184,77,0.1);
+    border-radius: 22px;
 }}
 QPushButton#manualBtn:disabled {{
     color: {fg_disabled};
     border-color: rgba(255,255,255,0.04);
+    border-radius: 22px;
 }}
 
 /* ── Table ── */

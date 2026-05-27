@@ -53,7 +53,6 @@ class DetailPanel(QScrollArea):
 
     def _build(self):
         container = QWidget()
-        container.setStyleSheet("background: transparent;")
         self.setWidget(container)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(12, 12, 12, 12)
@@ -115,7 +114,6 @@ class DetailPanel(QScrollArea):
 
         # ── Fields ─────────────────────────────────────────────────
         fields_widget = QWidget()
-        fields_widget.setStyleSheet("background: transparent;")
         fields_layout = QVBoxLayout(fields_widget)
         fields_layout.setContentsMargins(0, 10, 0, 10)
         fields_layout.setSpacing(6)
@@ -181,7 +179,6 @@ class DetailPanel(QScrollArea):
 
         # ── Actions ────────────────────────────────────────────────
         actions = QWidget()
-        actions.setStyleSheet("background: transparent;")
         a_layout = QVBoxLayout(actions)
         a_layout.setContentsMargins(0, 10, 0, 0)
         a_layout.setSpacing(6)
