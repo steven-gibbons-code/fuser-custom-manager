@@ -16,7 +16,7 @@ from gui.filter_bar import FilterBar
 from gui.song_table import SongTableModel, SongTableView
 from gui.detail_panel import DetailPanel
 from gui.status_bar import StatusBar
-from gui.workers import RefreshWorker, DownloadWorker, BatchDownloadWorker, ArtFetchWorker, ArtResolveWorker
+from gui.workers import RefreshWorker, DownloadWorker, BatchDownloadWorker, ArtFetchWorker, ArtResolveWorker, SingleArtWorker
 from gui.settings_dialog import SettingsDialog
 from gui.batch_results_dialog import BatchResultsDialog
 from gui.refresh_mode_dialog import RefreshModeDialog
@@ -41,6 +41,7 @@ class FuserApp(QMainWindow):
         self._batch_mode = False
         self._active_worker = None
         self._art_worker = None
+        self._single_art_worker = None
 
         scan_and_sync(self._install_dir, self.conn)
         self._build_ui()
@@ -65,7 +66,7 @@ class FuserApp(QMainWindow):
         self._batch_btn = QPushButton("☰ Batch Mode")
         self._batch_btn.clicked.connect(self._enter_batch_mode)
 
-        self._fetch_art_btn = QPushButton("⬇ Fetch Art")
+        self._fetch_art_btn = QPushButton("↓ Fetch Art")
         self._fetch_art_btn.clicked.connect(self._start_art_resolve)
         self.filter_bar.add_to_toolbar(self._fetch_art_btn)
         self.filter_bar.add_to_toolbar(self._batch_btn)
@@ -95,6 +96,7 @@ class FuserApp(QMainWindow):
         self.detail_panel.download_requested.connect(self._on_download)
         self.detail_panel.uninstall_requested.connect(self._on_uninstall)
         self.detail_panel.manual_install_requested.connect(self._on_manual_install)
+        self.detail_panel.fetch_art_requested.connect(self._fetch_art_for_song)
         splitter.addWidget(self.detail_panel)
 
         splitter.setStretchFactor(0, 7)
@@ -297,6 +299,14 @@ class FuserApp(QMainWindow):
         if (self.detail_panel._song
                 and self.detail_panel._song.get("id") == song_id):
             self.detail_panel.show(self.detail_panel._song)
+
+    def _fetch_art_for_song(self, song: dict):
+        worker = SingleArtWorker(song, self.conn)
+        worker.status.connect(self.status_bar.set_message)
+        worker.error.connect(self.status_bar.set_error)
+        worker.finished.connect(self._on_art_ready)
+        self._single_art_worker = worker
+        worker.start()
 
     # ── Download / install ────────────────────────────────────────────────
 

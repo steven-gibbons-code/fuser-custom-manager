@@ -57,7 +57,7 @@ def test_on_refresh_done_reruns_stale_check(qtbot):
 def test_fetch_art_button_exists_in_toolbar(qtbot):
     window = _make_app(qtbot)
     assert hasattr(window, "_fetch_art_btn")
-    assert window._fetch_art_btn.text() == "⬇ Fetch Art"
+    assert window._fetch_art_btn.text() == "↓ Fetch Art"
 
 
 def test_on_refresh_done_re_enables_buttons_when_no_art(qtbot):
@@ -76,3 +76,15 @@ def test_on_refresh_done_calls_art_resolve_when_include_art(qtbot):
          patch.object(window, "_start_art_resolve") as mock_resolve:
         window._on_refresh_done(include_art=True)
     mock_resolve.assert_called_once()
+
+
+def test_fetch_art_for_song_starts_single_art_worker(qtbot):
+    window = _make_app(qtbot)
+    song = {"id": 42, "artist": "Daft Punk", "title": "Get Lucky",
+            "art_url": None, "pak_path": None}
+    with patch("gui.main_window.SingleArtWorker") as MockWorker:
+        mock_instance = MagicMock()
+        MockWorker.return_value = mock_instance
+        window._fetch_art_for_song(song)
+    MockWorker.assert_called_once_with(song, window.conn)
+    mock_instance.start.assert_called_once()
