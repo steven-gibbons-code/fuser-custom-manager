@@ -300,3 +300,9 @@ def get_songs_with_art_url(conn: sqlite3.Connection) -> list[dict]:
 def update_art_url(conn: sqlite3.Connection, song_id: int, url: str) -> None:
     conn.execute("UPDATE songs SET art_url = ? WHERE id = ?", (url, song_id))
     conn.commit()
+
+
+def count_pending_art(conn: sqlite3.Connection) -> int:
+    return conn.execute(
+        "SELECT COUNT(*) FROM songs WHERE art_url IS NULL AND source != 'fusersoundlab'"
+    ).fetchone()[0]

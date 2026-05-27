@@ -4,7 +4,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from db import (init_db, upsert_songs, get_songs, mark_installed,
                 mark_uninstalled, get_installed, get_setting, set_setting,
-                get_songs_with_art_url, update_art_url, ART_DIR)
+                get_songs_with_art_url, update_art_url, count_pending_art, ART_DIR)
 
 SONG = {
     "source": "fucuco_main", "artist": "Daft Punk", "title": "Get Lucky",
@@ -312,3 +312,16 @@ def test_update_art_url_sets_value(tmp_path):
 def test_art_dir_is_under_fuser_manager():
     assert ART_DIR.parent.name == ".fuser_manager"
     assert ART_DIR.name == "art"
+
+def test_count_pending_art_excludes_fsl_and_resolved(conn):
+    upsert_songs(conn, [
+        {**SONG, "source": "fucuco_main", "art_url": None,                          "title": "Pending", "link": "https://drive.google.com/file/d/pending1"},
+        {**SONG, "source": "fucuco_main", "art_url": "http://example.com/a.jpg",    "title": "Resolved", "link": "https://drive.google.com/file/d/resolved1"},
+        {**SONG, "source": "fusersoundlab", "art_url": None,                        "title": "FSL", "link": "https://drive.google.com/file/d/fsl1"},
+    ])
+    assert count_pending_art(conn) == 1  # only "Pending": fucuco + null art_url
+
+
+def test_count_pending_art_returns_zero_when_all_resolved(conn):
+    upsert_songs(conn, [{**SONG, "art_url": "http://example.com/art.jpg", "title": "Done"}])
+    assert count_pending_art(conn) == 0
