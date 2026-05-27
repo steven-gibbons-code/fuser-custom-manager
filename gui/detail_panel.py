@@ -6,6 +6,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, Qt
 
+from gui.tokens import TOKENS
+
 _FIELDS = [
     ("artist",         "Artist"),
     ("title",          "Title"),
@@ -50,17 +52,17 @@ class DetailPanel(QScrollArea):
         h_layout.setContentsMargins(0, 0, 0, 12)
         h_layout.setSpacing(2)
         self._title_lbl = QLabel("—")
-        self._title_lbl.setStyleSheet("font-size: 16px; font-weight: 600; color: #e8e8e8;")
+        self._title_lbl.setStyleSheet(f"font-size: 16px; font-weight: 600; color: {TOKENS['fg_white']}; background: transparent;")
         self._title_lbl.setWordWrap(True)
         self._artist_lbl = QLabel("—")
-        self._artist_lbl.setStyleSheet("font-size: 13px; color: #2563eb; font-weight: 500;")
+        self._artist_lbl.setStyleSheet(f"font-size: 13px; color: {TOKENS['accent_pink']}; font-weight: 500; background: transparent;")
         h_layout.addWidget(self._title_lbl)
         h_layout.addWidget(self._artist_lbl)
         layout.addWidget(header)
 
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet("color: #272727;")
+        sep.setStyleSheet(f"color: rgba(255,255,255,0.06);")
         layout.addWidget(sep)
 
         # Fields section
@@ -75,10 +77,10 @@ class DetailPanel(QScrollArea):
                 continue
             row = QHBoxLayout()
             key_lbl = QLabel(f"{label}")
-            key_lbl.setStyleSheet("font-size: 11px; color: #666; min-width: 80px;")
+            key_lbl.setStyleSheet(f"font-size: 11px; color: {TOKENS['fg_tertiary']}; min-width: 80px; background: transparent;")
             key_lbl.setFixedWidth(90)
             val_lbl = QLabel("—")
-            val_lbl.setStyleSheet("font-size: 12px; color: #c0c0c0;")
+            val_lbl.setStyleSheet(f"font-size: 12px; color: {TOKENS['fg_muted']}; background: transparent;")
             val_lbl.setWordWrap(True)
             self._labels[field] = val_lbl
             row.addWidget(key_lbl)
@@ -92,18 +94,18 @@ class DetailPanel(QScrollArea):
         # Link row
         link_row = QHBoxLayout()
         link_key = QLabel("Link")
-        link_key.setStyleSheet("font-size: 11px; color: #666; min-width: 80px;")
+        link_key.setStyleSheet(f"font-size: 11px; color: {TOKENS['fg_tertiary']}; min-width: 80px; background: transparent;")
         link_key.setFixedWidth(90)
         self._link_btn = QPushButton("—")
         self._link_btn.setFlat(True)
-        self._link_btn.setStyleSheet("color: #6ab0f5; text-align: left; padding: 0;")
+        self._link_btn.setStyleSheet(f"color: {TOKENS['accent_pink']}; text-align: left; padding: 0; background: transparent; border: none;")
         self._link_btn.clicked.connect(self._open_link)
         link_row.addWidget(link_key)
         link_row.addWidget(self._link_btn)
         fields_layout.addLayout(link_row)
 
         self._path_lbl = QLabel("")
-        self._path_lbl.setStyleSheet("font-size: 10px; color: #555; padding-top: 4px;")
+        self._path_lbl.setStyleSheet(f"font-size: 10px; color: {TOKENS['fg_disabled']}; padding-top: 4px; background: transparent;")
         self._path_lbl.setWordWrap(True)
         fields_layout.addWidget(self._path_lbl)
 
@@ -111,7 +113,7 @@ class DetailPanel(QScrollArea):
 
         sep2 = QFrame()
         sep2.setFrameShape(QFrame.Shape.HLine)
-        sep2.setStyleSheet("color: #242424;")
+        sep2.setStyleSheet(f"color: rgba(255,255,255,0.06);")
         layout.addWidget(sep2)
 
         # Actions section

@@ -21,6 +21,12 @@ QFrame#toolbar, QFrame#filterbar, QFrame#batchbar {{
     border-bottom: 1px solid rgba(255,255,255,0.04);
 }}
 
+QFrame#toolbar QLabel, QFrame#filterbar QLabel {{
+    color: {fg_tertiary};
+    font-size: 12px;
+    background: transparent;
+}}
+
 /* ── Inputs ── */
 QLineEdit {{
     background: {surface_1};
@@ -53,12 +59,9 @@ QComboBox::drop-down {{
     width: 18px;
 }}
 QComboBox::down-arrow {{
-    width: 8px;
-    height: 8px;
-    border: 2px solid {fg_tertiary};
-    border-top: none;
-    border-right: none;
-    margin-right: 6px;
+    image: none;
+    width: 0;
+    height: 0;
 }}
 QComboBox QAbstractItemView {{
     background: {surface_2};

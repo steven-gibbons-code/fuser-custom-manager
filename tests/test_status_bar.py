@@ -64,7 +64,7 @@ def test_set_error_label_color(qtbot):
     qtbot.addWidget(bar)
     bar.show()
     bar.set_error("failed")
-    assert "#e76f51" in bar._lbl.styleSheet()
+    assert "#ef5350" in bar._lbl.styleSheet()  # danger token
 
 
 def test_set_idle(qtbot):

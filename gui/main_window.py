@@ -100,6 +100,11 @@ class FuserApp(QMainWindow):
         self._backdrop.lower()
         self._backdrop.resize(central.size())
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        if hasattr(self, "_backdrop"):
+            self._backdrop.resize(self.centralWidget().size())
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, "_backdrop"):
