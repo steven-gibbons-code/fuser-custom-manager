@@ -186,21 +186,6 @@ def test_get_index_uses_cache_when_fresh(tmp_path):
     assert "daft punk" in result
 
 
-def test_get_index_rebuilds_when_stale(tmp_path):
-    old_cache = {"ts": 0.0, "index": {}}
-    cache_file = tmp_path / "gdrive_art_index.json"
-    cache_file.write_text(json.dumps(old_cache))
-    with patch("sources.gdrive_art_index._INDEX_PATH", cache_file), \
-         patch(
-             "sources.gdrive_art_index._fetch_folder",
-             side_effect=[LETTER_D_HTML, LETTER_A_HTML],
-         ):
-        result = get_index(
-        )
-    # build_index is called with ROOT_HTML via _fetch_folder — but we only patched
-    # _fetch_folder, not the initial root fetch. Patch build_index directly instead.
-
-
 def test_get_index_rebuilds_when_stale_v2(tmp_path):
     """Stale cache triggers build_index; new index is written and returned."""
     old_cache = {"ts": 0.0, "index": {}}

@@ -130,12 +130,13 @@ def _parse_html(html: str) -> list[dict]:
     return entries
 
 
-def _is_image(entry: dict) -> bool:
-    mime = entry.get("mime", "")
-    if mime.startswith("image/"):
-        return True
-    ext = Path(entry.get("name", "")).suffix.lower()
-    return ext in _IMG_EXTS
+def _filter_images(files: list[dict]) -> list[dict]:
+    """Filter a list of file entries, returning only image files."""
+    return [
+        f for f in files
+        if Path(f["name"]).suffix.lower() in _IMG_EXTS
+        or f.get("mime", "").startswith("image/")
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -239,7 +240,7 @@ def lookup(artist: str) -> str | None:
         try:
             html = _fetch_folder(entry["folder_id"])
             all_entries = _parse_html(html)
-            images = [e for e in all_entries if _is_image(e)]
+            images = _filter_images(all_entries)
             entry["files"] = [{"id": e["id"], "name": e["name"]} for e in images]
             _save_index(index)
         except Exception:
