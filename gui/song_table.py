@@ -1,17 +1,5 @@
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QSize
-from PySide6.QtWidgets import (
-    QTableView, QStyledItemDelegate, QAbstractItemView,
-)
-
-# Column constants kept for get_songs() filter compatibility and tests
-COL_INSTALLED = 0
-COL_QUALITY   = 1
-COL_TITLE     = 2
-COL_ARTIST    = 3
-COL_KEY       = 4
-COL_BPM       = 5
-COL_SOURCE    = 6
-NUM_COLS      = 7
+from PySide6.QtWidgets import QTableView, QAbstractItemView
 
 
 class SongTableModel(QAbstractTableModel):
@@ -63,10 +51,12 @@ class SongTableView(QTableView):
         self.horizontalHeader().setStretchLastSection(True)
 
     def get_selected_songs(self) -> list[dict]:
-        m = self.model()
-        if m is None:
+        if self.model() is None:
             return []
-        return [m.get_row(idx.row()) for idx in self.selectionModel().selectedRows()]
+        return [
+            idx.data(Qt.ItemDataRole.UserRole)
+            for idx in self.selectionModel().selectedRows()
+        ]
 
     def select_all(self):
         self.selectAll()

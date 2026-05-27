@@ -114,7 +114,7 @@ class SongRowDelegate(QStyledItemDelegate):
         # ── Album art ───────────────────────────────────────────
         art_x = int(card.left() + 36)
         art_y = int(card.center().y() - ART_SIZE / 2)
-        p.drawPixmap(art_x, art_y, _art_pixmap(song["id"]))
+        p.drawPixmap(art_x, art_y, _art_pixmap(song.get("id", 0)))
 
         # ── Text ────────────────────────────────────────────────
         text_x    = art_x + ART_SIZE + 14
