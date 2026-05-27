@@ -4,10 +4,11 @@ from PySide6.QtWidgets import (
     QScrollArea, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFileDialog, QFrame,
 )
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal, Qt, QTimer
 
 from gui.tokens import TOKENS
 from gui.song_delegate import _art_pixmap
+from db import ART_DIR
 
 _FIELDS = [
     ("creator",        "Creator"),
@@ -42,6 +43,7 @@ class DetailPanel(QScrollArea):
     download_requested = Signal(object)
     uninstall_requested = Signal(object)
     manual_install_requested = Signal(object, object, object)
+    fetch_art_requested = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -64,6 +66,30 @@ class DetailPanel(QScrollArea):
         self._art_lbl.setStyleSheet("border-radius: 14px; background: transparent;")
         self._art_lbl.setPixmap(_art_pixmap(0, size=160))
         layout.addWidget(self._art_lbl)
+
+        self._art_overlay_btn = QPushButton("↓", self._art_lbl)
+        self._art_overlay_btn.setGeometry(58, 58, 44, 44)
+        self._art_overlay_btn.setStyleSheet(
+            "background: rgba(0,0,0,0.55); color: white; border-radius: 22px; "
+            "font-size: 20px; border: none;"
+        )
+        self._art_overlay_btn.clicked.connect(self._on_fetch_art_clicked)
+        self._art_overlay_btn.hide()
+
+        self._art_spinner_lbl = QLabel("⠋", self._art_lbl)
+        self._art_spinner_lbl.setGeometry(58, 58, 44, 44)
+        self._art_spinner_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._art_spinner_lbl.setStyleSheet(
+            "background: rgba(0,0,0,0.55); color: white; border-radius: 22px; font-size: 16px;"
+        )
+        self._art_spinner_lbl.hide()
+
+        self._spinner_frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        self._spinner_idx = 0
+        self._spinner_timer = QTimer(self)
+        self._spinner_timer.setInterval(100)
+        self._spinner_timer.timeout.connect(self._tick_spinner)
+
         layout.addSpacing(14)
 
         # ── Title ──────────────────────────────────────────────────
@@ -208,7 +234,30 @@ class DetailPanel(QScrollArea):
 
         self._sync_buttons()
 
+    def _update_art_overlay(self):
+        if not self._song:
+            self._art_overlay_btn.hide()
+            self._art_spinner_lbl.hide()
+            self._spinner_timer.stop()
+            return
+        has_art = (ART_DIR / f"{self._song['id']}.jpg").exists()
+        self._art_overlay_btn.setVisible(not has_art)
+        if has_art:
+            self._art_spinner_lbl.hide()
+            self._spinner_timer.stop()
+
+    def _on_fetch_art_clicked(self):
+        self._art_overlay_btn.hide()
+        self._art_spinner_lbl.show()
+        self._spinner_timer.start()
+        self.fetch_art_requested.emit(self._song)
+
+    def _tick_spinner(self):
+        self._spinner_idx = (self._spinner_idx + 1) % len(self._spinner_frames)
+        self._art_spinner_lbl.setText(self._spinner_frames[self._spinner_idx])
+
     def show(self, song: dict):
+        super().show()
         self._song = song
         self._manual_lbl.setText("")
 
@@ -246,6 +295,7 @@ class DetailPanel(QScrollArea):
             f"Installed: {song['pak_path']}" if song.get("pak_path") else ""
         )
         self._sync_buttons()
+        self._update_art_overlay()
 
     def show_manual_link(self, url: str):
         self._manual_lbl.setText(
@@ -268,6 +318,7 @@ class DetailPanel(QScrollArea):
         self._path_lbl.setText("")
         self._manual_lbl.setText("")
         self._sync_buttons()
+        self._update_art_overlay()
 
     def _sync_buttons(self):
         if not self._song:

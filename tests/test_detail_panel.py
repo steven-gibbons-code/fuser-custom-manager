@@ -2,6 +2,8 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from unittest.mock import patch
+from PySide6.QtCore import Qt
 from gui.detail_panel import DetailPanel
 
 SONG = {
@@ -163,3 +165,51 @@ def test_clear_resets_all_pills(qtbot):
     assert panel._quality_pill.text() == "—"
     assert panel._key_pill.text() == "—"
     assert panel._bpm_pill.text() == "—"
+
+
+# ── Art overlay button ─────────────────────────────────────────────────────
+
+_SONG_NO_ART = {"id": 42, "pak_path": None}
+
+
+def test_overlay_visible_when_no_art_on_disk(qtbot, tmp_path):
+    art_dir = tmp_path / "art"  # directory doesn't exist — no cached file
+    with patch("gui.detail_panel.ART_DIR", art_dir):
+        panel = DetailPanel()
+        qtbot.addWidget(panel)
+        panel.show(_SONG_NO_ART)
+    assert panel._art_overlay_btn.isVisible()
+
+
+def test_overlay_hidden_when_art_on_disk(qtbot, tmp_path):
+    art_dir = tmp_path / "art"
+    art_dir.mkdir()
+    (art_dir / "42.jpg").write_bytes(b"FAKE")
+    with patch("gui.detail_panel.ART_DIR", art_dir):
+        panel = DetailPanel()
+        qtbot.addWidget(panel)
+        panel.show(_SONG_NO_ART)
+    assert not panel._art_overlay_btn.isVisible()
+
+
+def test_overlay_hidden_on_clear(qtbot, tmp_path):
+    art_dir = tmp_path / "art"
+    with patch("gui.detail_panel.ART_DIR", art_dir):
+        panel = DetailPanel()
+        qtbot.addWidget(panel)
+        panel.show(_SONG_NO_ART)
+        panel.clear()
+    assert not panel._art_overlay_btn.isVisible()
+
+
+def test_fetch_art_requested_emitted_on_click(qtbot, tmp_path):
+    art_dir = tmp_path / "art"
+    emitted = []
+    with patch("gui.detail_panel.ART_DIR", art_dir):
+        panel = DetailPanel()
+        qtbot.addWidget(panel)
+        panel.fetch_art_requested.connect(lambda s: emitted.append(s))
+        panel.show(_SONG_NO_ART)
+        qtbot.mouseClick(panel._art_overlay_btn, Qt.MouseButton.LeftButton)
+    assert len(emitted) == 1
+    assert emitted[0]["id"] == 42
