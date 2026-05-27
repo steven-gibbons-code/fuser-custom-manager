@@ -7,16 +7,16 @@ from PySide6.QtWidgets import (
     QSplitter, QPushButton, QFrame, QLabel,
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QPixmapCache
 
-from db import init_db, get_songs, get_song_by_id, get_setting, set_setting
+from db import init_db, get_songs, get_song_by_id, get_setting, set_setting, get_songs_with_art_url, ART_DIR
 from installer import scan_and_sync, uninstall, install_manual_files, DEFAULT_INSTALL_DIR
 
 from gui.filter_bar import FilterBar
 from gui.song_table import SongTableModel, SongTableView
 from gui.detail_panel import DetailPanel
 from gui.status_bar import StatusBar
-from gui.workers import RefreshWorker, DownloadWorker, BatchDownloadWorker
+from gui.workers import RefreshWorker, DownloadWorker, BatchDownloadWorker, ArtFetchWorker
 from gui.settings_dialog import SettingsDialog
 from gui.batch_results_dialog import BatchResultsDialog
 from gui.widgets.stage_backdrop import StageBackdrop
@@ -39,6 +39,7 @@ class FuserApp(QMainWindow):
         self._install_dir = Path(path_str) if path_str else DEFAULT_INSTALL_DIR
         self._batch_mode = False
         self._active_worker = None
+        self._art_worker = None
 
         scan_and_sync(self._install_dir, self.conn)
         self._build_ui()
@@ -244,6 +245,25 @@ class FuserApp(QMainWindow):
         self.filter_bar.set_updated_label(f"Updated {date.today().isoformat()}")
         self._refresh_table()
         self._check_dates_stale()
+        self._start_art_fetch()
+
+    def _start_art_fetch(self):
+        songs = get_songs_with_art_url(self.conn)
+        uncached = [s for s in songs if not (ART_DIR / f"{s['id']}.jpg").exists()]
+        if not uncached:
+            return
+        worker = ArtFetchWorker(uncached)
+        worker.art_ready.connect(self._on_art_ready)
+        self._art_worker = worker
+        worker.start()
+
+    def _on_art_ready(self, song_id: int):
+        QPixmapCache.remove(f"art_{song_id}_48")
+        QPixmapCache.remove(f"art_{song_id}_160")
+        self.song_table.viewport().update()
+        if (self.detail_panel._song
+                and self.detail_panel._song.get("id") == song_id):
+            self.detail_panel.show(self.detail_panel._song)
 
     # ── Download / install ────────────────────────────────────────────────
 
