@@ -12,7 +12,6 @@ from PySide6.QtGui import QIcon
 from db import init_db, get_songs, get_song_by_id, get_setting, set_setting
 from installer import scan_and_sync, uninstall, install_manual_files, DEFAULT_INSTALL_DIR
 
-from gui.styles import APP_STYLE
 from gui.filter_bar import FilterBar
 from gui.song_table import SongTableModel, SongTableView
 from gui.detail_panel import DetailPanel
@@ -28,8 +27,6 @@ class FuserApp(QMainWindow):
         self.setWindowTitle("Fuser Custom Song Manager")
         self.resize(1200, 800)
         self.setMinimumSize(800, 600)
-
-        self.setStyleSheet(APP_STYLE)
 
         _icon_path = Path(__file__).parent.parent / "assets" / "icon.ico"
         if _icon_path.exists():
