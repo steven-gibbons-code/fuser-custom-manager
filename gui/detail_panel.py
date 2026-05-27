@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt
 
 from gui.tokens import TOKENS
+from gui.song_delegate import _art_pixmap
 
 _FIELDS = [
     ("artist",         "Artist"),
@@ -46,18 +47,33 @@ class DetailPanel(QScrollArea):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(0)
 
-        # Header section
+        # Header section — album art + title/artist side by side
         header = QFrame()
-        h_layout = QVBoxLayout(header)
+        h_layout = QHBoxLayout(header)
         h_layout.setContentsMargins(0, 0, 0, 12)
-        h_layout.setSpacing(2)
+        h_layout.setSpacing(12)
+
+        self._art_lbl = QLabel()
+        self._art_lbl.setFixedSize(80, 80)
+        self._art_lbl.setStyleSheet("border-radius: 10px; background: transparent;")
+        self._art_lbl.setPixmap(_art_pixmap(0, size=80))
+        h_layout.addWidget(self._art_lbl, 0, Qt.AlignmentFlag.AlignTop)
+
+        text_col = QWidget()
+        text_col.setStyleSheet("background: transparent;")
+        text_layout = QVBoxLayout(text_col)
+        text_layout.setContentsMargins(0, 4, 0, 0)
+        text_layout.setSpacing(4)
         self._title_lbl = QLabel("—")
         self._title_lbl.setStyleSheet(f"font-size: 16px; font-weight: 600; color: {TOKENS['fg_white']}; background: transparent;")
         self._title_lbl.setWordWrap(True)
         self._artist_lbl = QLabel("—")
         self._artist_lbl.setStyleSheet(f"font-size: 13px; color: {TOKENS['accent_pink']}; font-weight: 500; background: transparent;")
-        h_layout.addWidget(self._title_lbl)
-        h_layout.addWidget(self._artist_lbl)
+        text_layout.addWidget(self._title_lbl)
+        text_layout.addWidget(self._artist_lbl)
+        text_layout.addStretch()
+        h_layout.addWidget(text_col, 1)
+
         layout.addWidget(header)
 
         sep = QFrame()
@@ -152,6 +168,7 @@ class DetailPanel(QScrollArea):
         self._manual_lbl.setText("")
         self._title_lbl.setText(song.get("title", "—"))
         self._artist_lbl.setText(song.get("artist", "—"))
+        self._art_lbl.setPixmap(_art_pixmap(song.get("id", 0), size=80))
 
         for field, lbl in self._labels.items():
             if field in ("artist", "title"):
