@@ -229,7 +229,6 @@ QProgressBar {{
     border: none;
     border-radius: 3px;
     max-height: 4px;
-    text-visible: 0;
 }}
 QProgressBar::chunk {{
     background: {fuser};

@@ -219,17 +219,11 @@ class DetailPanel(QScrollArea):
         self._title_lbl.setText(song.get("title", "—"))
         self._artist_lbl.setText(song.get("artist", "—"))
 
-        # Quality pill — tier-coloured if not installed, green-tinted if installed
+        # Quality pill — always tier-coloured
         quality = song.get("quality", "Other") or "Other"
-        installed = bool(song.get("pak_path"))
-        if installed:
-            q_bg, q_fg = "rgba(74,209,92,0.18)", "#7be089"
-            q_text = f"✓ {quality}"
-        else:
-            q_bg, q_fg = _TIER_PILL.get(quality, (TOKENS["tier_other_bg"], TOKENS["tier_other_fg"]))
-            q_text = quality
+        q_bg, q_fg = _TIER_PILL.get(quality, (TOKENS["tier_other_bg"], TOKENS["tier_other_fg"]))
         self._quality_pill.setStyleSheet(_pill_style(q_bg, q_fg))
-        self._quality_pill.setText(q_text)
+        self._quality_pill.setText(quality)
 
         key = song.get("key", "") or ""
         self._key_pill.setText(key if key else "—")

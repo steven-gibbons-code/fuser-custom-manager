@@ -43,10 +43,10 @@ TOKENS = {
     # ── Tier pills (rgba strings for QSS; use _rgba() in paint code) ──
     "tier_official_bg":   "rgba(193, 79, 255, 0.18)",
     "tier_official_fg":   "#d29aff",
-    "tier_definitive_bg": "rgba(255, 94, 158, 0.20)",
-    "tier_definitive_fg": "#ff9bc2",
-    "tier_complete_bg":   "rgba(79, 195, 247, 0.18)",
-    "tier_complete_fg":   "#82d6fa",
+    "tier_definitive_bg": "rgba(220, 232, 255, 0.32)",
+    "tier_definitive_fg": "#ffffff",
+    "tier_complete_bg":   "rgba(255, 209, 102, 0.32)",
+    "tier_complete_fg":   "#ffe680",
     "tier_other_bg":      "rgba(124, 106, 163, 0.18)",
     "tier_other_fg":      "#b3a5d4",
 }

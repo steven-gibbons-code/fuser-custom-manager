@@ -67,8 +67,9 @@ class SongRowDelegate(QStyledItemDelegate):
         if not song:
             return
 
-        selected = bool(opt.state & QStyle.StateFlag.State_Selected)
-        hovered  = bool(opt.state & QStyle.StateFlag.State_MouseOver)
+        selected  = bool(opt.state & QStyle.StateFlag.State_Selected)
+        hovered   = bool(opt.state & QStyle.StateFlag.State_MouseOver)
+        installed = bool(song.get("pak_path"))
 
         # Card inset: 3px top/bottom creates a 6px gap between cards
         card = QRectF(opt.rect).adjusted(0, 3, 0, -3)
@@ -90,6 +91,11 @@ class SongRowDelegate(QStyledItemDelegate):
         card_path.addRoundedRect(card, ROW_RADIUS, ROW_RADIUS)
         p.drawPath(card_path)
 
+        # Green tint for installed songs
+        if installed and not selected:
+            p.setBrush(QColor(40, 200, 80, 75))
+            p.drawPath(card_path)
+
         # Inner top-edge highlight
         p.setPen(QPen(QColor(255, 255, 255, 12), 1))
         p.drawLine(
@@ -104,7 +110,6 @@ class SongRowDelegate(QStyledItemDelegate):
             p.drawPath(card_path)
 
         # ── Install dot ─────────────────────────────────────────
-        installed = bool(song.get("pak_path"))
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(C("success") if installed else QColor(255, 255, 255, 26))
         dot_cx = card.left() + 19
@@ -165,19 +170,14 @@ class SongRowDelegate(QStyledItemDelegate):
         p.restore()
 
     def _draw_pill(self, p: QPainter, x, y, w, h, quality: str, installed: bool):
-        if installed:
-            bg = _rgba("rgba(74, 209, 92, 0.18)")
-            fg = QColor("#7be089")
-            label = f"✓ {quality}"
-        else:
-            bg_key, fg_key = {
-                "Official":   ("tier_official_bg",   "tier_official_fg"),
-                "Definitive": ("tier_definitive_bg", "tier_definitive_fg"),
-                "Complete":   ("tier_complete_bg",   "tier_complete_fg"),
-            }.get(quality, ("tier_other_bg", "tier_other_fg"))
-            bg = _rgba(TOKENS[bg_key])
-            fg = QColor(TOKENS[fg_key])
-            label = quality
+        bg_key, fg_key = {
+            "Official":   ("tier_official_bg",   "tier_official_fg"),
+            "Definitive": ("tier_definitive_bg", "tier_definitive_fg"),
+            "Complete":   ("tier_complete_bg",   "tier_complete_fg"),
+        }.get(quality, ("tier_other_bg", "tier_other_fg"))
+        bg = _rgba(TOKENS[bg_key])
+        fg = QColor(TOKENS[fg_key])
+        label = quality
 
         path = QPainterPath()
         path.addRoundedRect(x, y, w, h, h / 2, h / 2)
