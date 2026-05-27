@@ -2,12 +2,13 @@ from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 import requests
 
-from db import upsert_songs, ART_DIR
+from db import upsert_songs, ART_DIR, update_art_url
 from downloader import download
 from installer import install_pairs
 from sources.fucuco import fetch_all as fetch_fucuco
 from sources.fusersoundlab import fetch_all as fetch_fsl
-from sources.art_resolver import bulk_resolve
+from sources.art_resolver import bulk_resolve, musicbrainz_lookup
+from sources.gdrive_art_index import lookup as gdrive_art_lookup
 
 
 class RefreshWorker(QThread):
@@ -148,5 +149,46 @@ class ArtResolveWorker(QThread):
         try:
             bulk_resolve(self._conn, progress_cb=self.status.emit)
             self.finished.emit()
+        except Exception as exc:
+            self.error.emit(str(exc) or type(exc).__name__)
+
+
+class SingleArtWorker(QThread):
+    finished = Signal(int)
+    error = Signal(str)
+    status = Signal(str)
+
+    def __init__(self, song: dict, conn, parent=None):
+        super().__init__(parent)
+        self._song = song
+        self._conn = conn
+
+    def run(self):
+        try:
+            song_id = self._song["id"]
+            art_url = self._song.get("art_url")
+
+            if art_url is None:
+                self.status.emit("Looking up art…")
+                art_url = musicbrainz_lookup(self._song["artist"], self._song["title"])
+                if not art_url:
+                    art_url = gdrive_art_lookup(
+                        self._song["artist"], status_cb=self.status.emit
+                    )
+                if art_url:
+                    update_art_url(self._conn, song_id, art_url)
+
+            if art_url:
+                dest = ART_DIR / f"{song_id}.jpg"
+                if not dest.exists():
+                    self.status.emit("Downloading art…")
+                    ART_DIR.mkdir(parents=True, exist_ok=True)
+                    resp = requests.get(
+                        art_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"}
+                    )
+                    if resp.status_code == 200:
+                        dest.write_bytes(resp.content)
+
+            self.finished.emit(song_id)
         except Exception as exc:
             self.error.emit(str(exc) or type(exc).__name__)

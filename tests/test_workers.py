@@ -4,7 +4,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from unittest.mock import patch, MagicMock
 from PySide6.QtWidgets import QApplication
-from gui.workers import RefreshWorker, DownloadWorker, BatchDownloadWorker, ArtFetchWorker, ArtResolveWorker
+from gui.workers import RefreshWorker, DownloadWorker, BatchDownloadWorker, ArtFetchWorker, ArtResolveWorker, SingleArtWorker
 
 _app = QApplication.instance() or QApplication([])
 
@@ -168,3 +168,60 @@ def test_art_resolve_worker_calls_bulk_resolve_with_progress_cb(qtbot):
             worker.start()
     _, kwargs = mock_resolve.call_args
     assert callable(kwargs.get("progress_cb"))
+
+
+def test_single_art_worker_resolves_and_downloads(tmp_path):
+    art_dir = tmp_path / "art"
+    conn = MagicMock()
+    song = {"id": 42, "artist": "Daft Punk", "title": "Get Lucky", "art_url": None}
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.content = b"FAKEIMAGE"
+    collected = []
+
+    with patch("gui.workers.ART_DIR", art_dir), \
+         patch("gui.workers.musicbrainz_lookup", return_value="http://mb.com/art.jpg"), \
+         patch("gui.workers.requests.get", return_value=mock_resp), \
+         patch("gui.workers.update_art_url") as mock_update:
+        worker = SingleArtWorker(song, conn)
+        worker.finished.connect(lambda sid: collected.append(sid))
+        worker.run()
+
+    assert (art_dir / "42.jpg").exists()
+    assert (art_dir / "42.jpg").read_bytes() == b"FAKEIMAGE"
+    assert collected == [42]
+    mock_update.assert_called_once_with(conn, 42, "http://mb.com/art.jpg")
+
+
+def test_single_art_worker_skips_resolve_when_art_url_exists(tmp_path):
+    art_dir = tmp_path / "art"
+    conn = MagicMock()
+    song = {"id": 7, "artist": "Daft Punk", "title": "Get Lucky",
+            "art_url": "http://existing.com/art.jpg"}
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.content = b"FAKEIMAGE"
+
+    with patch("gui.workers.ART_DIR", art_dir), \
+         patch("gui.workers.musicbrainz_lookup") as mock_mb, \
+         patch("gui.workers.requests.get", return_value=mock_resp):
+        worker = SingleArtWorker(song, conn)
+        worker.run()
+
+    mock_mb.assert_not_called()
+    assert (art_dir / "7.jpg").exists()
+
+
+def test_single_art_worker_emits_error_on_failure(tmp_path):
+    art_dir = tmp_path / "art"
+    conn = MagicMock()
+    song = {"id": 99, "artist": "Daft Punk", "title": "Get Lucky", "art_url": None}
+    errors = []
+
+    with patch("gui.workers.ART_DIR", art_dir), \
+         patch("gui.workers.musicbrainz_lookup", side_effect=Exception("network error")):
+        worker = SingleArtWorker(song, conn)
+        worker.error.connect(lambda e: errors.append(e))
+        worker.run()
+
+    assert errors and "network error" in errors[0]
