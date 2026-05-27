@@ -52,3 +52,27 @@ def test_on_refresh_done_reruns_stale_check(qtbot):
          patch.object(window, "_refresh_table"):
         window._on_refresh_done()
     mock_check.assert_called_once()
+
+
+def test_fetch_art_button_exists_in_toolbar(qtbot):
+    window = _make_app(qtbot)
+    assert hasattr(window, "_fetch_art_btn")
+    assert window._fetch_art_btn.text() == "⬇ Fetch Art"
+
+
+def test_on_refresh_done_re_enables_buttons_when_no_art(qtbot):
+    window = _make_app(qtbot)
+    with patch.object(window, "_check_dates_stale"), \
+         patch.object(window, "_refresh_table"), \
+         patch.object(window, "_set_action_buttons_enabled") as mock_enable:
+        window._on_refresh_done(include_art=False)
+    mock_enable.assert_called_once_with(True)
+
+
+def test_on_refresh_done_calls_art_resolve_when_include_art(qtbot):
+    window = _make_app(qtbot)
+    with patch.object(window, "_check_dates_stale"), \
+         patch.object(window, "_refresh_table"), \
+         patch.object(window, "_start_art_resolve") as mock_resolve:
+        window._on_refresh_done(include_art=True)
+    mock_resolve.assert_called_once()

@@ -4,21 +4,22 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QSplitter, QPushButton, QFrame, QLabel,
+    QSplitter, QPushButton, QFrame, QLabel, QDialog,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPixmapCache
 
-from db import init_db, get_songs, get_song_by_id, get_setting, set_setting, get_songs_with_art_url, ART_DIR
+from db import init_db, get_songs, get_song_by_id, get_setting, set_setting, get_songs_with_art_url, ART_DIR, count_pending_art
 from installer import scan_and_sync, uninstall, install_manual_files, DEFAULT_INSTALL_DIR
 
 from gui.filter_bar import FilterBar
 from gui.song_table import SongTableModel, SongTableView
 from gui.detail_panel import DetailPanel
 from gui.status_bar import StatusBar
-from gui.workers import RefreshWorker, DownloadWorker, BatchDownloadWorker, ArtFetchWorker
+from gui.workers import RefreshWorker, DownloadWorker, BatchDownloadWorker, ArtFetchWorker, ArtResolveWorker
 from gui.settings_dialog import SettingsDialog
 from gui.batch_results_dialog import BatchResultsDialog
+from gui.refresh_mode_dialog import RefreshModeDialog
 from gui.widgets.stage_backdrop import StageBackdrop
 from gui.widgets.fuser_label import FuserLabel
 
@@ -63,6 +64,10 @@ class FuserApp(QMainWindow):
         self.filter_bar._settings_btn.clicked.connect(self._open_settings)
         self._batch_btn = QPushButton("☰ Batch Mode")
         self._batch_btn.clicked.connect(self._enter_batch_mode)
+
+        self._fetch_art_btn = QPushButton("⬇ Fetch Art")
+        self._fetch_art_btn.clicked.connect(self._start_art_resolve)
+        self.filter_bar.add_to_toolbar(self._fetch_art_btn)
         self.filter_bar.add_to_toolbar(self._batch_btn)
         self.filter_bar.add_to_toolbar(self.filter_bar._settings_btn)
         root.addWidget(self.filter_bar)
@@ -163,6 +168,10 @@ class FuserApp(QMainWindow):
         else:
             self.status_bar.set_idle()
 
+    def _set_action_buttons_enabled(self, enabled: bool):
+        self.filter_bar.set_refresh_enabled(enabled)
+        self._fetch_art_btn.setEnabled(enabled)
+
     # ── Selection ─────────────────────────────────────────────────────────
 
     def _on_selection_changed(self):
@@ -232,31 +241,52 @@ class FuserApp(QMainWindow):
     # ── Refresh sources ───────────────────────────────────────────────────
 
     def _start_refresh(self):
-        self.filter_bar.set_refresh_enabled(False)
+        pending = count_pending_art(self.conn)
+        include_art = False
+        if pending > 0:
+            dlg = RefreshModeDialog(pending, parent=self)
+            include_art = dlg.exec() == QDialog.DialogCode.Accepted
+
+        self._set_action_buttons_enabled(False)
         worker = RefreshWorker(self.conn)
         worker.status.connect(self.status_bar.set_message)
-        worker.finished.connect(self._on_refresh_done)
         worker.error.connect(self.status_bar.set_error)
-        worker.finished.connect(lambda: self.filter_bar.set_refresh_enabled(True))
-        worker.error.connect(lambda _: self.filter_bar.set_refresh_enabled(True))
+        worker.error.connect(lambda _: self._set_action_buttons_enabled(True))
+        worker.finished.connect(lambda: self._on_refresh_done(include_art))
         self._active_worker = worker
         worker.start()
 
-    def _on_refresh_done(self):
+    def _on_refresh_done(self, include_art: bool = False):
         self.filter_bar.set_updated_label(f"Updated {date.today().isoformat()}")
         self._refresh_table()
         self._check_dates_stale()
-        self._start_art_fetch()
+        if include_art:
+            self._start_art_resolve()
+        else:
+            self._set_action_buttons_enabled(True)
+
+    def _start_art_resolve(self):
+        self._set_action_buttons_enabled(False)
+        worker = ArtResolveWorker(self.conn)
+        worker.status.connect(self.status_bar.set_message)
+        worker.error.connect(self.status_bar.set_error)
+        worker.error.connect(lambda _: self._set_action_buttons_enabled(True))
+        worker.finished.connect(self._start_art_fetch)
+        self._art_worker = worker
+        worker.start()
 
     def _start_art_fetch(self):
         songs = get_songs_with_art_url(self.conn)
         uncached = [s for s in songs if not (ART_DIR / f"{s['id']}.jpg").exists()]
         if not uncached:
+            self._set_action_buttons_enabled(True)
+            self.status_bar.set_idle()
             return
         worker = ArtFetchWorker(uncached)
         worker.status.connect(self.status_bar.set_message)
         worker.art_ready.connect(self._on_art_ready)
         worker.finished.connect(self.status_bar.set_idle)
+        worker.finished.connect(lambda: self._set_action_buttons_enabled(True))
         self._art_worker = worker
         worker.start()
 
