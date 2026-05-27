@@ -4,6 +4,7 @@ from pathlib import Path
 
 DB_DIR = Path.home() / ".fuser_manager"
 DB_PATH = DB_DIR / "catalog.db"
+ART_DIR = DB_DIR / "art"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS songs (
@@ -127,6 +128,7 @@ def _migrate_add_columns(conn: sqlite3.Connection) -> None:
         ("download_type", "TEXT"),
         ("quality",       "TEXT"),
         ("submit_date",   "TEXT"),
+        ("art_url",       "TEXT"),
     ]
     for col_name, col_type in new_cols:
         if col_name not in existing:
@@ -168,17 +170,20 @@ def upsert_songs(conn: sqlite3.Connection, songs: list[dict]) -> None:
         s.setdefault("disc4", None)
         s.setdefault("download_type", None)
         s.setdefault("submit_date", None)
+        s.setdefault("art_url", None)
         s["quality"] = derive_quality(s)
         enriched.append(s)
     conn.executemany("""
         INSERT INTO songs (source, artist, title, creator, genre, year, bpm, key,
                            de_status, complete, complete_notes, stream_opt, origin,
                            link, link_host, last_seen,
-                           disc1, disc2, disc3, disc4, download_type, quality, submit_date)
+                           disc1, disc2, disc3, disc4, download_type, quality, submit_date,
+                           art_url)
         VALUES (:source, :artist, :title, :creator, :genre, :year, :bpm, :key,
                 :de_status, :complete, :complete_notes, :stream_opt, :origin,
                 :link, :link_host, :last_seen,
-                :disc1, :disc2, :disc3, :disc4, :download_type, :quality, :submit_date)
+                :disc1, :disc2, :disc3, :disc4, :download_type, :quality, :submit_date,
+                :art_url)
         ON CONFLICT(source, link) DO UPDATE SET
             artist=excluded.artist, title=excluded.title,
             creator=excluded.creator, genre=excluded.genre, year=excluded.year,
@@ -189,7 +194,8 @@ def upsert_songs(conn: sqlite3.Connection, songs: list[dict]) -> None:
             disc1=excluded.disc1, disc2=excluded.disc2,
             disc3=excluded.disc3, disc4=excluded.disc4,
             download_type=excluded.download_type, quality=excluded.quality,
-            submit_date=COALESCE(excluded.submit_date, submit_date)
+            submit_date=COALESCE(excluded.submit_date, submit_date),
+            art_url=COALESCE(excluded.art_url, art_url)
     """, enriched)
     conn.commit()
 
@@ -283,3 +289,14 @@ def get_song_by_id(conn: sqlite3.Connection, song_id: int) -> dict | None:
         WHERE s.id = ?
     """, (song_id,)).fetchall()]
     return rows[0] if rows else None
+
+
+def get_songs_with_art_url(conn: sqlite3.Connection) -> list[dict]:
+    return [dict(r) for r in conn.execute(
+        "SELECT id, art_url FROM songs WHERE art_url IS NOT NULL"
+    ).fetchall()]
+
+
+def update_art_url(conn: sqlite3.Connection, song_id: int, url: str) -> None:
+    conn.execute("UPDATE songs SET art_url = ? WHERE id = ?", (url, song_id))
+    conn.commit()

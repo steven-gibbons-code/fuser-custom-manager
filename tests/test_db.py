@@ -2,7 +2,9 @@ import sys
 from pathlib import Path
 import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from db import init_db, upsert_songs, get_songs, mark_installed, mark_uninstalled, get_installed, get_setting, set_setting
+from db import (init_db, upsert_songs, get_songs, mark_installed,
+                mark_uninstalled, get_installed, get_setting, set_setting,
+                get_songs_with_art_url, update_art_url, ART_DIR)
 
 SONG = {
     "source": "fucuco_main", "artist": "Daft Punk", "title": "Get Lucky",
@@ -266,3 +268,47 @@ def test_upsert_updates_submit_date_when_new_date_provided(tmp_path):
     upsert_songs(conn, [{**SONG, "submit_date": "2024-06-15"}])
     row = get_songs(conn, {})[0]
     assert row["submit_date"] == "2024-06-15"
+
+
+def test_art_url_column_exists_after_migration(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(songs)").fetchall()}
+    assert "art_url" in cols
+
+def test_upsert_preserves_art_url_on_resync(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    song = {**SONG, "art_url": "http://example.com/art.jpg"}
+    upsert_songs(conn, [song])
+    # Re-sync with art_url=None — existing URL must be preserved
+    upsert_songs(conn, [{**SONG, "art_url": None}])
+    row = conn.execute("SELECT art_url FROM songs").fetchone()
+    assert row[0] == "http://example.com/art.jpg"
+
+def test_upsert_updates_art_url_when_new_value_provided(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    upsert_songs(conn, [{**SONG, "art_url": "http://example.com/old.jpg"}])
+    upsert_songs(conn, [{**SONG, "art_url": "http://example.com/new.jpg"}])
+    row = conn.execute("SELECT art_url FROM songs").fetchone()
+    assert row[0] == "http://example.com/new.jpg"
+
+def test_get_songs_with_art_url_returns_only_songs_with_url(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    s_with = {**SONG, "art_url": "http://img.com/a.jpg"}
+    s_without = {**SONG, "title": "No Art", "link": "https://drive.google.com/file/d/xyz2",
+                 "art_url": None}
+    upsert_songs(conn, [s_with, s_without])
+    result = get_songs_with_art_url(conn)
+    assert len(result) == 1
+    assert result[0]["art_url"] == "http://img.com/a.jpg"
+
+def test_update_art_url_sets_value(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    upsert_songs(conn, [SONG])
+    song_id = conn.execute("SELECT id FROM songs").fetchone()[0]
+    update_art_url(conn, song_id, "http://img.com/cover.jpg")
+    row = conn.execute("SELECT art_url FROM songs WHERE id = ?", (song_id,)).fetchone()
+    assert row[0] == "http://img.com/cover.jpg"
+
+def test_art_dir_is_under_fuser_manager():
+    assert ART_DIR.parent.name == ".fuser_manager"
+    assert ART_DIR.name == "art"
