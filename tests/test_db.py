@@ -245,3 +245,24 @@ def test_get_songs_no_limit_returns_all(tmp_path):
     upsert_songs(conn, songs)
     rows = get_songs(conn, {}, limit=0)
     assert len(rows) == 110
+
+
+def test_upsert_preserves_submit_date_when_null_incoming(tmp_path):
+    """Re-fetching a song that now returns submit_date=None must not erase an existing date."""
+    conn = init_db(tmp_path / "test.db")
+    upsert_songs(conn, [{**SONG, "submit_date": "2024-03-15"}])
+    # Re-upsert same song with submit_date missing (source didn't return it)
+    upsert_songs(conn, [{**SONG, "submit_date": None}])
+    row = get_songs(conn, {})[0]
+    assert row["submit_date"] == "2024-03-15", (
+        "existing submit_date was erased by a null incoming value"
+    )
+
+
+def test_upsert_updates_submit_date_when_new_date_provided(tmp_path):
+    """A new non-null submit_date from the source should update the stored value."""
+    conn = init_db(tmp_path / "test.db")
+    upsert_songs(conn, [{**SONG, "submit_date": "2023-01-01"}])
+    upsert_songs(conn, [{**SONG, "submit_date": "2024-06-15"}])
+    row = get_songs(conn, {})[0]
+    assert row["submit_date"] == "2024-06-15"

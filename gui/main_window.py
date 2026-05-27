@@ -135,11 +135,14 @@ class FuserApp(QMainWindow):
     def _check_dates_stale(self):
         null_dates = self.conn.execute(
             "SELECT COUNT(*) FROM songs WHERE submit_date IS NULL"
+            " AND source != 'fusersoundlab'"
         ).fetchone()[0]
         if null_dates > 0:
             self.status_bar.set_message(
                 f"{null_dates:,} songs have no date — click Refresh Sources to update."
             )
+        else:
+            self.status_bar.set_idle()
 
     # ── Selection ─────────────────────────────────────────────────────────
 
@@ -222,6 +225,7 @@ class FuserApp(QMainWindow):
     def _on_refresh_done(self):
         self.filter_bar.set_updated_label(f"Updated {date.today().isoformat()}")
         self._refresh_table()
+        self._check_dates_stale()
 
     # ── Download / install ────────────────────────────────────────────────
 

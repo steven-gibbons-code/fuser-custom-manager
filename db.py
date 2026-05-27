@@ -189,7 +189,7 @@ def upsert_songs(conn: sqlite3.Connection, songs: list[dict]) -> None:
             disc1=excluded.disc1, disc2=excluded.disc2,
             disc3=excluded.disc3, disc4=excluded.disc4,
             download_type=excluded.download_type, quality=excluded.quality,
-            submit_date=excluded.submit_date
+            submit_date=COALESCE(excluded.submit_date, submit_date)
     """, enriched)
     conn.commit()
 
