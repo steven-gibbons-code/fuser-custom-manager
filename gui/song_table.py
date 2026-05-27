@@ -134,16 +134,26 @@ class QualityDelegate(QStyledItemDelegate):
 
 
 class _RowBgDelegate(QStyledItemDelegate):
-    """Applies model BackgroundRole to columns using Qt's default text rendering.
+    """Paints background + text directly so QSS alternate-background-color cannot override.
 
-    Without this, QSS alternate-background-color overrides BackgroundRole
-    for cells that don't have a custom delegate.
+    initStyleOption/backgroundBrush is insufficient: QStyleSheetStyle repaints
+    the alternating-row background after the brush, erasing it. Direct fillRect
+    wins because it runs after all style-engine painting.
     """
-    def initStyleOption(self, option, index):
-        super().initStyleOption(option, index)
-        bg = index.data(Qt.ItemDataRole.BackgroundRole)
-        if bg:
-            option.backgroundBrush = bg
+    def paint(self, painter: QPainter, option, index: QModelIndex):
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.fillRect(option.rect, QColor("#1e3a5f"))
+        else:
+            bg = index.data(Qt.ItemDataRole.BackgroundRole)
+            painter.fillRect(option.rect, bg.color() if bg else QColor("#1c1c1c"))
+        text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+        if text:
+            painter.save()
+            painter.setPen(QColor("#93c5fd") if option.state & QStyle.StateFlag.State_Selected else QColor("#e0e0e0"))
+            text_rect = option.rect.adjusted(6, 0, -6, 0)
+            elided = painter.fontMetrics().elidedText(text, Qt.TextElideMode.ElideRight, text_rect.width())
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided)
+            painter.restore()
 
 
 class SongTableView(QTableView):
