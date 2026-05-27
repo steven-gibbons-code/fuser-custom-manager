@@ -23,6 +23,7 @@ _EMPTY_SONG = {
     "complete": "", "complete_notes": "", "stream_opt": 0, "origin": None,
     "disc1": None, "disc2": None, "disc3": None, "disc4": None,
     "download_type": None,
+    "art_url": None,
 }
 
 
@@ -66,6 +67,7 @@ def parse_playlist_json(data: dict) -> list[dict]:
             "link":      link,
             "link_host": detect_link_host(link),
             "last_seen": date.today().isoformat(),
+            "art_url":   (track.get("poster") or track.get("optional_poster") or "").strip() or None,
         })
     return songs
 
