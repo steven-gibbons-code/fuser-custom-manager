@@ -10,11 +10,7 @@ from gui.tokens import TOKENS
 from gui.song_delegate import _art_pixmap
 
 _FIELDS = [
-    ("artist",         "Artist"),
-    ("title",          "Title"),
     ("creator",        "Creator"),
-    ("bpm",            "BPM"),
-    ("key",            "Key"),
     ("genre",          "Genre"),
     ("year",           "Year"),
     ("submit_date",    "Date"),
@@ -25,6 +21,21 @@ _FIELDS = [
     ("origin",         "Origin"),
     ("stream_opt",     "Stream-Opt"),
 ]
+
+_TIER_PILL = {
+    "Official":   (TOKENS["tier_official_bg"],   TOKENS["tier_official_fg"]),
+    "Definitive": (TOKENS["tier_definitive_bg"],  TOKENS["tier_definitive_fg"]),
+    "Complete":   (TOKENS["tier_complete_bg"],    TOKENS["tier_complete_fg"]),
+}
+_MUTED_PILL_BG = "rgba(42, 24, 69, 0.9)"
+_MUTED_PILL_FG = TOKENS["fg_muted"]
+
+
+def _pill_style(bg: str, fg: str) -> str:
+    return (
+        f"background: {bg}; color: {fg}; border-radius: 11px; "
+        f"padding: 3px 11px; font-size: 12px; font-weight: 600;"
+    )
 
 
 class DetailPanel(QScrollArea):
@@ -42,103 +53,140 @@ class DetailPanel(QScrollArea):
 
     def _build(self):
         container = QWidget()
+        container.setStyleSheet("background: transparent;")
         self.setWidget(container)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(0)
 
-        # Header section — album art + title/artist side by side
-        header = QFrame()
-        h_layout = QHBoxLayout(header)
-        h_layout.setContentsMargins(0, 0, 0, 12)
-        h_layout.setSpacing(12)
-
+        # ── Album art ──────────────────────────────────────────────
         self._art_lbl = QLabel()
-        self._art_lbl.setFixedSize(80, 80)
-        self._art_lbl.setStyleSheet("border-radius: 10px; background: transparent;")
-        self._art_lbl.setPixmap(_art_pixmap(0, size=80))
-        h_layout.addWidget(self._art_lbl, 0, Qt.AlignmentFlag.AlignTop)
+        self._art_lbl.setFixedSize(160, 160)
+        self._art_lbl.setStyleSheet("border-radius: 14px; background: transparent;")
+        self._art_lbl.setPixmap(_art_pixmap(0, size=160))
+        layout.addWidget(self._art_lbl)
+        layout.addSpacing(14)
 
-        text_col = QWidget()
-        text_col.setStyleSheet("background: transparent;")
-        text_layout = QVBoxLayout(text_col)
-        text_layout.setContentsMargins(0, 4, 0, 0)
-        text_layout.setSpacing(4)
+        # ── Title ──────────────────────────────────────────────────
         self._title_lbl = QLabel("—")
-        self._title_lbl.setStyleSheet(f"font-size: 16px; font-weight: 600; color: {TOKENS['fg_white']}; background: transparent;")
+        self._title_lbl.setStyleSheet(
+            f"font-size: 22px; font-weight: 700; color: {TOKENS['fg_white']}; "
+            f"background: transparent;"
+        )
         self._title_lbl.setWordWrap(True)
+        layout.addWidget(self._title_lbl)
+        layout.addSpacing(2)
+
+        # ── Artist ─────────────────────────────────────────────────
         self._artist_lbl = QLabel("—")
-        self._artist_lbl.setStyleSheet(f"font-size: 13px; color: {TOKENS['accent_pink']}; font-weight: 500; background: transparent;")
-        text_layout.addWidget(self._title_lbl)
-        text_layout.addWidget(self._artist_lbl)
-        text_layout.addStretch()
-        h_layout.addWidget(text_col, 1)
+        self._artist_lbl.setStyleSheet(
+            f"font-size: 14px; color: {TOKENS['accent_pink']}; "
+            f"font-weight: 500; background: transparent;"
+        )
+        layout.addWidget(self._artist_lbl)
+        layout.addSpacing(12)
 
-        layout.addWidget(header)
+        # ── Pills: Quality | Key | BPM ──────────────────────────────
+        pills_row = QHBoxLayout()
+        pills_row.setSpacing(6)
+        pills_row.setContentsMargins(0, 0, 0, 0)
 
+        self._quality_pill = QLabel("—")
+        self._quality_pill.setStyleSheet(_pill_style(_MUTED_PILL_BG, _MUTED_PILL_FG))
+        pills_row.addWidget(self._quality_pill)
+
+        self._key_pill = QLabel("—")
+        self._key_pill.setStyleSheet(_pill_style(_MUTED_PILL_BG, _MUTED_PILL_FG))
+        pills_row.addWidget(self._key_pill)
+
+        self._bpm_pill = QLabel("—")
+        self._bpm_pill.setStyleSheet(_pill_style(_MUTED_PILL_BG, _MUTED_PILL_FG))
+        pills_row.addWidget(self._bpm_pill)
+
+        pills_row.addStretch()
+        layout.addLayout(pills_row)
+        layout.addSpacing(14)
+
+        # ── Separator ──────────────────────────────────────────────
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f"color: rgba(255,255,255,0.06);")
+        sep.setStyleSheet("color: rgba(255,255,255,0.06);")
         layout.addWidget(sep)
 
-        # Fields section
+        # ── Fields ─────────────────────────────────────────────────
         fields_widget = QWidget()
+        fields_widget.setStyleSheet("background: transparent;")
         fields_layout = QVBoxLayout(fields_widget)
-        fields_layout.setContentsMargins(0, 8, 0, 8)
-        fields_layout.setSpacing(5)
+        fields_layout.setContentsMargins(0, 10, 0, 10)
+        fields_layout.setSpacing(6)
 
         self._labels: dict[str, QLabel] = {}
         for field, label in _FIELDS:
-            if field in ("artist", "title"):
-                continue
             row = QHBoxLayout()
-            key_lbl = QLabel(f"{label}")
-            key_lbl.setStyleSheet(f"font-size: 11px; color: {TOKENS['fg_tertiary']}; min-width: 80px; background: transparent;")
-            key_lbl.setFixedWidth(90)
+            row.setSpacing(8)
+            key_lbl = QLabel(label.upper())
+            key_lbl.setStyleSheet(
+                f"font-size: 10px; color: {TOKENS['fg_tertiary']}; "
+                f"font-weight: 600; background: transparent;"
+            )
+            key_lbl.setFixedWidth(84)
             val_lbl = QLabel("—")
-            val_lbl.setStyleSheet(f"font-size: 12px; color: {TOKENS['fg_muted']}; background: transparent;")
+            val_lbl.setStyleSheet(
+                f"font-size: 13px; color: {TOKENS['fg_soft']}; background: transparent;"
+            )
             val_lbl.setWordWrap(True)
             self._labels[field] = val_lbl
             row.addWidget(key_lbl)
             row.addWidget(val_lbl)
             fields_layout.addLayout(row)
 
-        # Also add artist and title to _labels for test access
-        self._labels["artist"] = self._artist_lbl
-        self._labels["title"] = self._title_lbl
-
         # Link row
         link_row = QHBoxLayout()
-        link_key = QLabel("Link")
-        link_key.setStyleSheet(f"font-size: 11px; color: {TOKENS['fg_tertiary']}; min-width: 80px; background: transparent;")
-        link_key.setFixedWidth(90)
+        link_row.setSpacing(8)
+        link_key = QLabel("LINK")
+        link_key.setStyleSheet(
+            f"font-size: 10px; color: {TOKENS['fg_tertiary']}; "
+            f"font-weight: 600; background: transparent;"
+        )
+        link_key.setFixedWidth(84)
         self._link_btn = QPushButton("—")
         self._link_btn.setFlat(True)
-        self._link_btn.setStyleSheet(f"color: {TOKENS['accent_pink']}; text-align: left; padding: 0; background: transparent; border: none;")
+        self._link_btn.setStyleSheet(
+            f"color: {TOKENS['accent_pink']}; text-align: left; "
+            f"padding: 0; background: transparent; border: none; font-size: 13px;"
+        )
         self._link_btn.clicked.connect(self._open_link)
         link_row.addWidget(link_key)
         link_row.addWidget(self._link_btn)
         fields_layout.addLayout(link_row)
 
         self._path_lbl = QLabel("")
-        self._path_lbl.setStyleSheet(f"font-size: 10px; color: {TOKENS['fg_disabled']}; padding-top: 4px; background: transparent;")
+        self._path_lbl.setStyleSheet(
+            f"font-size: 10px; color: {TOKENS['fg_disabled']}; "
+            f"padding-top: 4px; background: transparent;"
+        )
         self._path_lbl.setWordWrap(True)
         fields_layout.addWidget(self._path_lbl)
+
+        # Also expose title/artist in _labels for test access
+        self._labels["artist"] = self._artist_lbl
+        self._labels["title"] = self._title_lbl
 
         layout.addWidget(fields_widget)
 
         sep2 = QFrame()
         sep2.setFrameShape(QFrame.Shape.HLine)
-        sep2.setStyleSheet(f"color: rgba(255,255,255,0.06);")
+        sep2.setStyleSheet("color: rgba(255,255,255,0.06);")
         layout.addWidget(sep2)
 
-        # Actions section
+        # ── Actions ────────────────────────────────────────────────
         actions = QWidget()
+        actions.setStyleSheet("background: transparent;")
         a_layout = QVBoxLayout(actions)
         a_layout.setContentsMargins(0, 10, 0, 0)
         a_layout.setSpacing(6)
 
-        self._dl_btn = QPushButton("Download && Install")
+        self._dl_btn = QPushButton("Download & Install")
         self._dl_btn.setObjectName("primaryBtn")
         self._dl_btn.clicked.connect(self._download)
         a_layout.addWidget(self._dl_btn)
@@ -166,9 +214,28 @@ class DetailPanel(QScrollArea):
     def show(self, song: dict):
         self._song = song
         self._manual_lbl.setText("")
+
+        self._art_lbl.setPixmap(_art_pixmap(song.get("id", 0), size=160))
         self._title_lbl.setText(song.get("title", "—"))
         self._artist_lbl.setText(song.get("artist", "—"))
-        self._art_lbl.setPixmap(_art_pixmap(song.get("id", 0), size=80))
+
+        # Quality pill — tier-coloured if not installed, green-tinted if installed
+        quality = song.get("quality", "Other") or "Other"
+        installed = bool(song.get("pak_path"))
+        if installed:
+            q_bg, q_fg = "rgba(74,209,92,0.18)", "#7be089"
+            q_text = f"✓ {quality}"
+        else:
+            q_bg, q_fg = _TIER_PILL.get(quality, (TOKENS["tier_other_bg"], TOKENS["tier_other_fg"]))
+            q_text = quality
+        self._quality_pill.setStyleSheet(_pill_style(q_bg, q_fg))
+        self._quality_pill.setText(q_text)
+
+        key = song.get("key", "") or ""
+        self._key_pill.setText(key if key else "—")
+
+        bpm = song.get("bpm")
+        self._bpm_pill.setText(f"{bpm} BPM" if bpm else "—")
 
         for field, lbl in self._labels.items():
             if field in ("artist", "title"):
@@ -185,17 +252,24 @@ class DetailPanel(QScrollArea):
         link = song.get("link", "")
         self._link_btn.setText((link[:38] + "…") if len(link) > 38 else link or "—")
         self._path_lbl.setText(
-            f"Installed: {song['pak_path']}" if song.get("pak_path") else "")
+            f"Installed: {song['pak_path']}" if song.get("pak_path") else ""
+        )
         self._sync_buttons()
 
     def show_manual_link(self, url: str):
         self._manual_lbl.setText(
-            "Manual download required.\nClick the link above to open in browser.")
+            "Manual download required.\nClick the link above to open in browser."
+        )
 
     def clear(self):
         self._song = None
+        self._art_lbl.setPixmap(_art_pixmap(0, size=160))
         self._title_lbl.setText("—")
         self._artist_lbl.setText("—")
+        self._quality_pill.setText("—")
+        self._quality_pill.setStyleSheet(_pill_style(_MUTED_PILL_BG, _MUTED_PILL_FG))
+        self._key_pill.setText("—")
+        self._bpm_pill.setText("—")
         for field, lbl in self._labels.items():
             if field not in ("artist", "title"):
                 lbl.setText("—")
