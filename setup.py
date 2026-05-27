@@ -14,7 +14,7 @@ setup(
         ],
     },
     install_requires=[
-        "customtkinter>=5.2.2",
+        "PySide6>=6.6.0",
         "requests>=2.31.0",
         "beautifulsoup4>=4.12.3",
         "gdown>=5.1.0",

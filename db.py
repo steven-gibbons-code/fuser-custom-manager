@@ -189,12 +189,12 @@ def upsert_songs(conn: sqlite3.Connection, songs: list[dict]) -> None:
             disc1=excluded.disc1, disc2=excluded.disc2,
             disc3=excluded.disc3, disc4=excluded.disc4,
             download_type=excluded.download_type, quality=excluded.quality,
-            submit_date=excluded.submit_date
+            submit_date=COALESCE(excluded.submit_date, submit_date)
     """, enriched)
     conn.commit()
 
 
-def get_songs(conn: sqlite3.Connection, filters: dict) -> list[dict]:
+def get_songs(conn: sqlite3.Connection, filters: dict, limit: int = 100) -> list[dict]:
     where, params = _build_where_params(filters)
 
     _ALLOWED_ORDER = {
@@ -206,7 +206,6 @@ def get_songs(conn: sqlite3.Connection, filters: dict) -> list[dict]:
     if order not in _ALLOWED_ORDER:
         order = "s.artist"
     direction = "DESC" if filters.get("descending") else "ASC"
-    offset = filters.get("offset", 0)
 
     sql = f"""
         SELECT s.*, {_IS_DEFINITIVE} AS is_definitive,
@@ -215,9 +214,12 @@ def get_songs(conn: sqlite3.Connection, filters: dict) -> list[dict]:
         LEFT JOIN installed i ON i.song_id = s.id
         WHERE {' AND '.join(where)}
         ORDER BY {order} {direction}, s.id DESC
-        LIMIT 100 OFFSET ?
     """
-    params.append(offset)
+    if limit > 0:
+        offset = filters.get("offset", 0)
+        sql += "\n        LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 

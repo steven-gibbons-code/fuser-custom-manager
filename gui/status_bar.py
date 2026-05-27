@@ -1,41 +1,57 @@
-import customtkinter as ctk
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QProgressBar
+from PySide6.QtCore import QTimer
 
 
-class StatusBar(ctk.CTkFrame):
-    def __init__(self, master, **kwargs):
-        super().__init__(master, height=36, **kwargs)
-        self.grid_columnconfigure(1, weight=1)
+class StatusBar(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 4, 8, 4)
 
-        self._lbl = ctk.CTkLabel(self, text="Ready", anchor="w")
-        self._lbl.grid(row=0, column=0, padx=10, sticky="w")
+        self._lbl = QLabel("Ready")
+        self._lbl.setStyleSheet("color: #666666;")
+        layout.addWidget(self._lbl)
+        layout.addStretch()
 
-        self._bar = ctk.CTkProgressBar(self, width=200)
-        self._bar.set(0)
-        self._bar.grid(row=0, column=1, padx=10, sticky="e")
-        self._bar.grid_remove()
+        self._progress = QProgressBar()
+        self._progress.setRange(0, 100)
+        self._progress.setFixedWidth(200)
+        self._progress.setTextVisible(False)
+        self._progress.hide()
+        layout.addWidget(self._progress)
+
+        self._idle_timer = QTimer(self)
+        self._idle_timer.setSingleShot(True)
+        self._idle_timer.timeout.connect(self.set_idle)
 
     def start_download(self, title: str):
-        self._lbl.configure(text=f"Downloading: {title}", text_color="white")
-        self._bar.set(0)
-        self._bar.grid()
+        self._lbl.setText(f"Downloading: {title}")
+        self._lbl.setStyleSheet("color: #e0e0e0;")
+        self._progress.setValue(0)
+        self._progress.show()
 
     def set_progress(self, value: float):
-        self._bar.set(max(0.0, min(1.0, value)))
+        self._progress.setValue(int(max(0.0, min(1.0, value)) * 100))
 
     def set_done(self, title: str):
-        self._lbl.configure(text=f"Installed: {title}", text_color="#52b788")
-        self._bar.set(1.0)
-        self.after(3000, self.set_idle)
+        self._lbl.setText(f"Installed: {title}")
+        self._lbl.setStyleSheet("color: #52b788;")
+        self._progress.setValue(100)
+        self._idle_timer.start(3000)
 
     def set_error(self, msg: str):
-        self._lbl.configure(text=f"Error: {msg}", text_color="#e76f51")
-        self._bar.grid_remove()
+        self._lbl.setText(f"Error: {msg}")
+        self._lbl.setStyleSheet("color: #e76f51;")
+        self._progress.hide()
 
     def set_idle(self):
-        self._lbl.configure(text="Ready", text_color="white")
-        self._bar.grid_remove()
-        self._bar.set(0)
+        self._idle_timer.stop()
+        self._lbl.setText("Ready")
+        self._lbl.setStyleSheet("color: #666666;")
+        self._progress.hide()
+        self._progress.setValue(0)
 
     def set_message(self, text: str):
-        self._lbl.configure(text=text, text_color="white")
-        self._bar.grid_remove()
+        self._lbl.setText(text)
+        self._lbl.setStyleSheet("color: #e0e0e0;")
+        self._progress.hide()
