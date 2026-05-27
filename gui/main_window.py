@@ -19,6 +19,8 @@ from gui.status_bar import StatusBar
 from gui.workers import RefreshWorker, DownloadWorker, BatchDownloadWorker
 from gui.settings_dialog import SettingsDialog
 from gui.batch_results_dialog import BatchResultsDialog
+from gui.widgets.stage_backdrop import StageBackdrop
+from gui.widgets.fuser_label import FuserLabel
 
 
 class FuserApp(QMainWindow):
@@ -52,6 +54,8 @@ class FuserApp(QMainWindow):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
+        self._backdrop = StageBackdrop(central)
+
         self.filter_bar = FilterBar()
         self.filter_bar.filters_changed.connect(self._on_filters_changed)
         self.filter_bar._refresh_btn.clicked.connect(self._start_refresh)
@@ -60,6 +64,9 @@ class FuserApp(QMainWindow):
         self._batch_btn.clicked.connect(self._enter_batch_mode)
         self.filter_bar.add_to_toolbar(self._batch_btn)
         root.addWidget(self.filter_bar)
+
+        self._fuser_lbl = FuserLabel("FUSER", pt_size=22)
+        self.filter_bar._top_layout.insertWidget(0, self._fuser_lbl)
 
         self._model = SongTableModel()
         self.song_table = SongTableView()
@@ -89,6 +96,14 @@ class FuserApp(QMainWindow):
 
         self.status_bar = StatusBar()
         root.addWidget(self.status_bar)
+
+        self._backdrop.lower()
+        self._backdrop.resize(central.size())
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "_backdrop"):
+            self._backdrop.resize(self.centralWidget().size())
 
     def _build_batch_bar(self) -> QFrame:
         bar = QFrame()
