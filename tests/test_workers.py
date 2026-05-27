@@ -4,7 +4,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from unittest.mock import patch, MagicMock
 from PySide6.QtWidgets import QApplication
-from gui.workers import RefreshWorker, DownloadWorker, BatchDownloadWorker, ArtFetchWorker
+from gui.workers import RefreshWorker, DownloadWorker, BatchDownloadWorker, ArtFetchWorker, ArtResolveWorker
 
 _app = QApplication.instance() or QApplication([])
 
@@ -15,10 +15,12 @@ def test_refresh_worker_emits_finished(qtbot, tmp_path):
     mock_songs = [{"title": "A"}, {"title": "B"}]
     with patch("gui.workers.fetch_fucuco", return_value=[mock_songs[0]]), \
          patch("gui.workers.fetch_fsl", return_value=[mock_songs[1]]), \
-         patch("gui.workers.upsert_songs") as mock_upsert:
+         patch("gui.workers.upsert_songs") as mock_upsert, \
+         patch("gui.workers.bulk_resolve") as mock_resolve:
         with qtbot.waitSignal(worker.finished, timeout=3000):
             worker.start()
         mock_upsert.assert_called_once()
+        mock_resolve.assert_not_called()
 
 
 def test_refresh_worker_emits_error_on_exception(qtbot):
@@ -139,3 +141,30 @@ def test_art_fetch_worker_skips_on_download_error(tmp_path):
         worker.run()  # Must not raise
 
     assert not (art_dir / "99.jpg").exists()
+
+
+def test_art_resolve_worker_emits_finished(qtbot):
+    conn = MagicMock()
+    worker = ArtResolveWorker(conn)
+    with patch("gui.workers.bulk_resolve"):
+        with qtbot.waitSignal(worker.finished, timeout=3000):
+            worker.start()
+
+
+def test_art_resolve_worker_emits_error_on_exception(qtbot):
+    conn = MagicMock()
+    worker = ArtResolveWorker(conn)
+    with patch("gui.workers.bulk_resolve", side_effect=RuntimeError("resolve error")):
+        with qtbot.waitSignal(worker.error, timeout=3000) as blocker:
+            worker.start()
+    assert "resolve error" in blocker.args[0]
+
+
+def test_art_resolve_worker_calls_bulk_resolve_with_progress_cb(qtbot):
+    conn = MagicMock()
+    worker = ArtResolveWorker(conn)
+    with patch("gui.workers.bulk_resolve") as mock_resolve:
+        with qtbot.waitSignal(worker.finished, timeout=3000):
+            worker.start()
+    _, kwargs = mock_resolve.call_args
+    assert callable(kwargs.get("progress_cb"))

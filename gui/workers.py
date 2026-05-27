@@ -24,7 +24,6 @@ class RefreshWorker(QThread):
             self.status.emit("Refreshing sources…")
             songs = fetch_fucuco() + fetch_fsl()
             upsert_songs(self._conn, songs)
-            bulk_resolve(self._conn, progress_cb=self.status.emit)
             self.finished.emit()
         except Exception as exc:
             self.error.emit(str(exc) or type(exc).__name__)
@@ -134,3 +133,20 @@ class ArtFetchWorker(QThread):
         if failed:
             self.status.emit(f"Art fetch done — {total - failed}/{total} downloaded")
         self.finished.emit()
+
+
+class ArtResolveWorker(QThread):
+    finished = Signal()
+    error = Signal(str)
+    status = Signal(str)
+
+    def __init__(self, conn, parent=None):
+        super().__init__(parent)
+        self._conn = conn
+
+    def run(self):
+        try:
+            bulk_resolve(self._conn, progress_cb=self.status.emit)
+            self.finished.emit()
+        except Exception as exc:
+            self.error.emit(str(exc) or type(exc).__name__)
