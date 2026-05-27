@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 from PySide6.QtCore import Qt, QRect, QRectF, QSize, QPointF, QModelIndex
 from PySide6.QtGui import (
     QPainter, QColor, QFont, QFontMetrics, QLinearGradient,
@@ -6,6 +7,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QStyledItemDelegate, QStyle
 
+from db import ART_DIR
 from gui.tokens import TOKENS, C
 
 ROW_HEIGHT = 64
@@ -51,26 +53,57 @@ def _rgba(token_str: str) -> QColor:
 
 
 def _art_pixmap(song_id: int, size: int = ART_SIZE) -> QPixmap:
-    """Return a cached gradient album-art square for the given song id."""
+    """Return a cached pixmap for song_id: real art from disk, or gradient fallback."""
     key = f"art_{song_id}_{size}"
     pm = QPixmap()
-    if not QPixmapCache.find(key, pm):
-        pm = QPixmap(size, size)
-        pm.fill(Qt.GlobalColor.transparent)
-        p = QPainter(pm)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        a, b = _PALETTES[abs(song_id) % len(_PALETTES)]
-        g = QLinearGradient(0, 0, size, size)
-        g.setColorAt(0, QColor(a))
-        g.setColorAt(1, QColor(b))
-        path = QPainterPath()
-        path.addRoundedRect(0, 0, size, size, ART_RADIUS, ART_RADIUS)
-        p.fillPath(path, QBrush(g))
-        p.setPen(QPen(QColor(255, 255, 255, 20), 1))
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawPath(path)
-        p.end()
-        QPixmapCache.insert(key, pm)
+    if QPixmapCache.find(key, pm):
+        return pm
+
+    # Check disk cache for downloaded art
+    art_file = ART_DIR / f"{song_id}.jpg"
+    if art_file.exists():
+        source = QPixmap(str(art_file))
+        if not source.isNull():
+            # Scale to fill, then crop to exact square
+            scaled = source.scaled(
+                size, size,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            x = (scaled.width() - size) // 2
+            y = (scaled.height() - size) // 2
+            cropped = scaled.copy(x, y, size, size)
+
+            # Apply rounded corners via clip path
+            rounded = QPixmap(size, size)
+            rounded.fill(Qt.GlobalColor.transparent)
+            p = QPainter(rounded)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            clip = QPainterPath()
+            clip.addRoundedRect(0, 0, size, size, ART_RADIUS, ART_RADIUS)
+            p.setClipPath(clip)
+            p.drawPixmap(0, 0, cropped)
+            p.end()
+            QPixmapCache.insert(key, rounded)
+            return rounded
+
+    # Generate gradient placeholder
+    pm = QPixmap(size, size)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    a, b = _PALETTES[abs(song_id) % len(_PALETTES)]
+    g = QLinearGradient(0, 0, size, size)
+    g.setColorAt(0, QColor(a))
+    g.setColorAt(1, QColor(b))
+    path = QPainterPath()
+    path.addRoundedRect(0, 0, size, size, ART_RADIUS, ART_RADIUS)
+    p.fillPath(path, QBrush(g))
+    p.setPen(QPen(QColor(255, 255, 255, 20), 1))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawPath(path)
+    p.end()
+    QPixmapCache.insert(key, pm)
     return pm
 
 
