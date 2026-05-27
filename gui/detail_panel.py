@@ -247,6 +247,8 @@ class DetailPanel(QScrollArea):
             self._spinner_timer.stop()
 
     def _on_fetch_art_clicked(self):
+        if not self._song:
+            return
         self._art_overlay_btn.hide()
         self._art_spinner_lbl.show()
         self._spinner_timer.start()
@@ -257,7 +259,6 @@ class DetailPanel(QScrollArea):
         self._art_spinner_lbl.setText(self._spinner_frames[self._spinner_idx])
 
     def show(self, song: dict):
-        super().show()
         self._song = song
         self._manual_lbl.setText("")
 

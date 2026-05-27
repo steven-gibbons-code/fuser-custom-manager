@@ -178,7 +178,7 @@ def test_overlay_visible_when_no_art_on_disk(qtbot, tmp_path):
         panel = DetailPanel()
         qtbot.addWidget(panel)
         panel.show(_SONG_NO_ART)
-    assert panel._art_overlay_btn.isVisible()
+        assert not panel._art_overlay_btn.isHidden()
 
 
 def test_overlay_hidden_when_art_on_disk(qtbot, tmp_path):
