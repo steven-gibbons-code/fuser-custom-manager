@@ -13,6 +13,7 @@ from sources.art_resolver import bulk_resolve
 class RefreshWorker(QThread):
     finished = Signal()
     error = Signal(str)
+    status = Signal(str)
 
     def __init__(self, conn, parent=None):
         super().__init__(parent)
@@ -20,9 +21,10 @@ class RefreshWorker(QThread):
 
     def run(self):
         try:
+            self.status.emit("Refreshing sources…")
             songs = fetch_fucuco() + fetch_fsl()
             upsert_songs(self._conn, songs)
-            bulk_resolve(self._conn)
+            bulk_resolve(self._conn, progress_cb=self.status.emit)
             self.finished.emit()
         except Exception as exc:
             self.error.emit(str(exc) or type(exc).__name__)
@@ -100,6 +102,7 @@ class BatchDownloadWorker(QThread):
 class ArtFetchWorker(QThread):
     art_ready = Signal(int)
     finished = Signal()
+    status = Signal(str)
 
     def __init__(self, songs: list[dict], parent=None):
         super().__init__(parent)
@@ -107,11 +110,14 @@ class ArtFetchWorker(QThread):
 
     def run(self):
         ART_DIR.mkdir(parents=True, exist_ok=True)
-        for song in self._songs:
+        total = len(self._songs)
+        failed = 0
+        for i, song in enumerate(self._songs):
             song_id = song["id"]
             dest = ART_DIR / f"{song_id}.jpg"
             if dest.exists():
                 continue
+            self.status.emit(f"Fetching art… ({i + 1}/{total})")
             try:
                 resp = requests.get(
                     song["art_url"],
@@ -121,6 +127,10 @@ class ArtFetchWorker(QThread):
                 if resp.status_code == 200:
                     dest.write_bytes(resp.content)
                     self.art_ready.emit(song_id)
+                else:
+                    failed += 1
             except Exception:
-                pass
+                failed += 1
+        if failed:
+            self.status.emit(f"Art fetch done — {total - failed}/{total} downloaded")
         self.finished.emit()

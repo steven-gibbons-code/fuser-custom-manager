@@ -51,16 +51,18 @@ def musicbrainz_lookup(artist: str, title: str) -> str | None:
         return None
 
 
-def bulk_resolve(conn: sqlite3.Connection) -> None:
+def bulk_resolve(conn: sqlite3.Connection, progress_cb=None) -> None:
     """Look up art URLs for all songs where art_url IS NULL and source is not fusersoundlab."""
     rows = conn.execute(
         "SELECT id, source, artist, title FROM songs WHERE art_url IS NULL"
     ).fetchall()
-    for row in rows:
-        if row["source"] == "fusersoundlab":
-            continue
+    pending = [r for r in rows if r["source"] != "fusersoundlab"]
+    total = len(pending)
+    for i, row in enumerate(pending):
+        if progress_cb:
+            progress_cb(f"Resolving art… ({i + 1}/{total})")
         url = musicbrainz_lookup(row["artist"], row["title"])
         if not url:
-            url = gdrive_art_lookup(row["artist"])
+            url = gdrive_art_lookup(row["artist"], status_cb=progress_cb)
         if url:
             update_art_url(conn, row["id"], url)

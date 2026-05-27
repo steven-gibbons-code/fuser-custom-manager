@@ -167,7 +167,7 @@ def _save_index(index: dict) -> None:
     )
 
 
-def _load_index() -> dict:
+def _load_index(build_cb=None) -> dict:
     """Load the index from disk cache if fresh; otherwise rebuild from Drive."""
     if _INDEX_PATH.exists():
         try:
@@ -177,6 +177,8 @@ def _load_index() -> dict:
         except (json.JSONDecodeError, KeyError):
             pass
 
+    if build_cb:
+        build_cb("Building GDrive art index…")
     index = build_index(FOLDER_ID)
     _save_index(index)
     return index
@@ -223,14 +225,14 @@ def get_index() -> dict:
     return _load_index()
 
 
-def lookup(artist: str) -> str | None:
+def lookup(artist: str, status_cb=None) -> str | None:
     """Return a direct download URL for the first image matching *artist*, or None.
 
     On first call for an artist, fetches the artist's GDrive folder to populate
     ``files``; the result is cached to disk so subsequent calls are free.
     """
     key = artist.strip().lower()
-    index = _load_index()
+    index = _load_index(build_cb=status_cb)
     entry = index.get(key)
     if not entry:
         return None

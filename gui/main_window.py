@@ -234,6 +234,7 @@ class FuserApp(QMainWindow):
     def _start_refresh(self):
         self.filter_bar.set_refresh_enabled(False)
         worker = RefreshWorker(self.conn)
+        worker.status.connect(self.status_bar.set_message)
         worker.finished.connect(self._on_refresh_done)
         worker.error.connect(self.status_bar.set_error)
         worker.finished.connect(lambda: self.filter_bar.set_refresh_enabled(True))
@@ -253,7 +254,9 @@ class FuserApp(QMainWindow):
         if not uncached:
             return
         worker = ArtFetchWorker(uncached)
+        worker.status.connect(self.status_bar.set_message)
         worker.art_ready.connect(self._on_art_ready)
+        worker.finished.connect(self.status_bar.set_idle)
         self._art_worker = worker
         worker.start()
 

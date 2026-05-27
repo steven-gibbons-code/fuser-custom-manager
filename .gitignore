@@ -10,3 +10,8 @@ venv/
 *.swp
 dist/
 build/
+
+# Tooling artifacts
+.codegraph/
+.playwright-mcp/
+.superpowers/
