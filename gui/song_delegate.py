@@ -1,5 +1,4 @@
 import re
-from pathlib import Path
 from PySide6.QtCore import Qt, QRect, QRectF, QSize, QPointF, QModelIndex
 from PySide6.QtGui import (
     QPainter, QColor, QFont, QFontMetrics, QLinearGradient,
