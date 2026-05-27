@@ -3,14 +3,15 @@ from PySide6.QtWidgets import QTableView, QStyledItemDelegate, QAbstractItemView
 from PySide6.QtGui import QPainter, QColor, QFont, QBrush
 
 COL_INSTALLED = 0
-COL_TITLE = 1
-COL_ARTIST = 2
-COL_BPM = 3
-COL_QUALITY = 4
-COL_SOURCE = 5
-NUM_COLS = 6
+COL_QUALITY = 1
+COL_TITLE = 2
+COL_ARTIST = 3
+COL_KEY = 4
+COL_BPM = 5
+COL_SOURCE = 6
+NUM_COLS = 7
 
-_HEADERS = ["", "Title", "Artist", "BPM", "Quality", "Source"]
+_HEADERS = ["", "Quality", "Title", "Artist", "Key", "BPM", "Source"]
 
 _QUALITY_COLORS = {
     "Official":   ("#1a1535", "#8b7de8"),
@@ -51,15 +52,17 @@ class SongTableModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.DisplayRole:
             if col == COL_INSTALLED:
                 return None
+            if col == COL_QUALITY:
+                return row.get("quality", "")
             if col == COL_TITLE:
                 return row.get("title", "")
             if col == COL_ARTIST:
                 return row.get("artist", "")
+            if col == COL_KEY:
+                return row.get("key", "") or ""
             if col == COL_BPM:
                 bpm = row.get("bpm")
                 return str(bpm) if bpm else ""
-            if col == COL_QUALITY:
-                return row.get("quality", "")
             if col == COL_SOURCE:
                 return row.get("source", "")
 
@@ -174,11 +177,13 @@ class SongTableView(QTableView):
         self.setItemDelegateForColumn(COL_QUALITY, QualityDelegate(self))
         self.setItemDelegateForColumn(COL_TITLE, _RowBgDelegate(self))
         self.setItemDelegateForColumn(COL_ARTIST, _RowBgDelegate(self))
+        self.setItemDelegateForColumn(COL_KEY, _RowBgDelegate(self))
         self.setItemDelegateForColumn(COL_BPM, _RowBgDelegate(self))
         self.setItemDelegateForColumn(COL_SOURCE, _RowBgDelegate(self))
         self.setColumnWidth(COL_INSTALLED, 28)
-        self.setColumnWidth(COL_BPM, 60)
         self.setColumnWidth(COL_QUALITY, 100)
+        self.setColumnWidth(COL_KEY, 60)
+        self.setColumnWidth(COL_BPM, 55)
         self.setColumnWidth(COL_SOURCE, 110)
         self.horizontalHeader().setStretchLastSection(False)
         self.horizontalHeader().setSectionResizeMode(COL_TITLE, QHeaderView.ResizeMode.Stretch)

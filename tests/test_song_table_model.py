@@ -26,7 +26,7 @@ def test_reset_updates_row_count(qtbot):
 
 def test_column_count(qtbot):
     model = SongTableModel()
-    assert model.columnCount() == 6
+    assert model.columnCount() == 7
 
 
 def test_data_title(qtbot):
