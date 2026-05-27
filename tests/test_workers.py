@@ -3,7 +3,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from unittest.mock import patch, MagicMock
-from gui.workers import RefreshWorker, DownloadWorker, BatchDownloadWorker
+from PySide6.QtWidgets import QApplication
+from gui.workers import RefreshWorker, DownloadWorker, BatchDownloadWorker, ArtFetchWorker
+
+_app = QApplication.instance() or QApplication([])
 
 
 def test_refresh_worker_emits_finished(qtbot, tmp_path):
@@ -90,3 +93,49 @@ def test_batch_worker_emits_finished_with_results(qtbot):
     results = blocker.args[0]
     assert len(results) == 2
     assert all(r["status"] == "ok" for r in results)
+
+
+def test_art_fetch_worker_downloads_image(tmp_path):
+    art_dir = tmp_path / "art"
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.content = b"FAKEIMAGE"
+
+    songs = [{"id": 42, "art_url": "http://example.com/cover.jpg"}]
+    collected = []
+
+    with patch("gui.workers.ART_DIR", art_dir), \
+         patch("gui.workers.requests.get", return_value=mock_resp):
+        worker = ArtFetchWorker(songs)
+        worker.art_ready.connect(lambda sid: collected.append(sid))
+        worker.run()  # Call run() directly (not start()) for synchronous testing
+
+    assert (art_dir / "42.jpg").exists()
+    assert (art_dir / "42.jpg").read_bytes() == b"FAKEIMAGE"
+    assert collected == [42]
+
+
+def test_art_fetch_worker_skips_existing_cached_file(tmp_path):
+    art_dir = tmp_path / "art"
+    art_dir.mkdir()
+    (art_dir / "7.jpg").write_bytes(b"EXISTING")
+
+    songs = [{"id": 7, "art_url": "http://example.com/cover.jpg"}]
+
+    with patch("gui.workers.ART_DIR", art_dir), \
+         patch("gui.workers.requests.get") as mock_get:
+        worker = ArtFetchWorker(songs)
+        worker.run()
+        mock_get.assert_not_called()
+
+
+def test_art_fetch_worker_skips_on_download_error(tmp_path):
+    art_dir = tmp_path / "art"
+    songs = [{"id": 99, "art_url": "http://example.com/cover.jpg"}]
+
+    with patch("gui.workers.ART_DIR", art_dir), \
+         patch("gui.workers.requests.get", side_effect=Exception("network error")):
+        worker = ArtFetchWorker(songs)
+        worker.run()  # Must not raise
+
+    assert not (art_dir / "99.jpg").exists()

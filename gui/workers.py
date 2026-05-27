@@ -1,7 +1,8 @@
 from pathlib import Path
 from PySide6.QtCore import QThread, Signal
+import requests
 
-from db import upsert_songs
+from db import upsert_songs, ART_DIR
 from downloader import download
 from installer import install_pairs
 from sources.fucuco import fetch_all as fetch_fucuco
@@ -94,3 +95,32 @@ class BatchDownloadWorker(QThread):
                 entry["message"] = result.error_msg or "Unknown error"
             results.append(entry)
         self.finished.emit(results)
+
+
+class ArtFetchWorker(QThread):
+    art_ready = Signal(int)
+    finished = Signal()
+
+    def __init__(self, songs: list[dict], parent=None):
+        super().__init__(parent)
+        self._songs = songs  # each dict has {id, art_url}
+
+    def run(self):
+        ART_DIR.mkdir(parents=True, exist_ok=True)
+        for song in self._songs:
+            song_id = song["id"]
+            dest = ART_DIR / f"{song_id}.jpg"
+            if dest.exists():
+                continue
+            try:
+                resp = requests.get(
+                    song["art_url"],
+                    timeout=15,
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                if resp.status_code == 200:
+                    dest.write_bytes(resp.content)
+                    self.art_ready.emit(song_id)
+            except Exception:
+                pass
+        self.finished.emit()
