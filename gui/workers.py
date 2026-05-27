@@ -6,6 +6,7 @@ from downloader import download
 from installer import install_pairs
 from sources.fucuco import fetch_all as fetch_fucuco
 from sources.fusersoundlab import fetch_all as fetch_fsl
+from sources.art_resolver import bulk_resolve
 
 
 class RefreshWorker(QThread):
@@ -20,6 +21,7 @@ class RefreshWorker(QThread):
         try:
             songs = fetch_fucuco() + fetch_fsl()
             upsert_songs(self._conn, songs)
+            bulk_resolve(self._conn)
             self.finished.emit()
         except Exception as exc:
             self.error.emit(str(exc) or type(exc).__name__)

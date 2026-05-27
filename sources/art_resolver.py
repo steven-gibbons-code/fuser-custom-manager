@@ -1,5 +1,9 @@
 import time
+import sqlite3
 import requests
+
+from db import update_art_url
+from sources.gdrive_art_index import lookup as gdrive_art_lookup
 
 _MB_URL = "https://musicbrainz.org/ws/2/release"
 _CAA_URL = "https://coverartarchive.org/release/{mbid}/front-250"
@@ -45,3 +49,18 @@ def musicbrainz_lookup(artist: str, title: str) -> str | None:
         return None
     except Exception:
         return None
+
+
+def bulk_resolve(conn: sqlite3.Connection) -> None:
+    """Look up art URLs for all songs where art_url IS NULL and source is not fusersoundlab."""
+    rows = conn.execute(
+        "SELECT id, source, artist, title FROM songs WHERE art_url IS NULL"
+    ).fetchall()
+    for row in rows:
+        if row["source"] == "fusersoundlab":
+            continue
+        url = musicbrainz_lookup(row["artist"], row["title"])
+        if not url:
+            url = gdrive_art_lookup(row["artist"])
+        if url:
+            update_art_url(conn, row["id"], url)
