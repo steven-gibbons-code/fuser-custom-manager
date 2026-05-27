@@ -24,6 +24,8 @@ class FuserLabel(QWidget):
         f.setWeight(QFont.Weight.Black)
         f.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 104)
         self._font = f
+        # WA_TranslucentBackground enables OS-level compositing so the gradient
+        # path renders over the StageBackdrop without a solid widget background.
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
     def setText(self, text: str):

@@ -27,7 +27,7 @@ _TIER_PILL = {
     "Definitive": (TOKENS["tier_definitive_bg"],  TOKENS["tier_definitive_fg"]),
     "Complete":   (TOKENS["tier_complete_bg"],    TOKENS["tier_complete_fg"]),
 }
-_MUTED_PILL_BG = "rgba(42, 24, 69, 0.9)"
+_MUTED_PILL_BG = TOKENS["pill_muted_bg"]
 _MUTED_PILL_FG = TOKENS["fg_muted"]
 
 

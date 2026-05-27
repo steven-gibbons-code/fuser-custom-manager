@@ -2,6 +2,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter, QRadialGradient, QColor
 from PySide6.QtWidgets import QWidget
 
+from gui.tokens import TOKENS
+
 
 class StageBackdrop(QWidget):
     """Full-window radial gradient backdrop matching the Fuser Battles screen.
@@ -12,6 +14,8 @@ class StageBackdrop(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # WA_StyledBackground=False tells Qt's stylesheet engine to skip this
+        # widget entirely, preventing QSS from overriding our custom paintEvent.
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         self.lower()
 
@@ -23,8 +27,8 @@ class StageBackdrop(QWidget):
             self.height() * 1.1,
             self.width() * 1.2,
         )
-        g.setColorAt(0.00, QColor("#ff5e9e"))
-        g.setColorAt(0.22, QColor("#6b2d7a"))
-        g.setColorAt(0.50, QColor("#2a0d4a"))
-        g.setColorAt(1.00, QColor("#0a0420"))
+        g.setColorAt(0.00, QColor(TOKENS["accent_pink"]))
+        g.setColorAt(0.22, QColor(TOKENS["stage_purple"]))
+        g.setColorAt(0.50, QColor(TOKENS["stage_deep"]))
+        g.setColorAt(1.00, QColor(TOKENS["surface_0"]))
         p.fillRect(self.rect(), g)

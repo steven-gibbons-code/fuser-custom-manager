@@ -175,6 +175,10 @@ class FilterBar(QWidget):
         """Append a widget to the right end of the top toolbar row."""
         self._top_layout.addWidget(widget)
 
+    def prepend_to_toolbar(self, widget):
+        """Insert a widget at position 0 of the top toolbar row."""
+        self._top_layout.insertWidget(0, widget)
+
     def set_updated_label(self, text: str):
         self._updated_lbl.setText(text)
 

@@ -8,6 +8,9 @@ from PySide6.QtGui import QColor
 TOKENS = {
     # ── Surfaces ────────────────────────────────────────────────
     "surface_0":          "#0a0420",
+    # Stage backdrop midpoints (between accent_pink and surface_0)
+    "stage_purple":       "#6b2d7a",
+    "stage_deep":         "#2a0d4a",
     "surface_1":          "#150629",
     "surface_2":          "#1a0b32",
     "surface_3":          "#20133a",
@@ -49,6 +52,10 @@ TOKENS = {
     "tier_complete_fg":   "#ffe680",
     "tier_other_bg":      "rgba(124, 106, 163, 0.18)",
     "tier_other_fg":      "#b3a5d4",
+
+    # ── UI component colours ────────────────────────────────────
+    # surface_4 (#2a1845) at 90% — used for unselected/muted pill backgrounds
+    "pill_muted_bg":      "rgba(42, 24, 69, 0.9)",
 }
 
 # QSS-syntax gradients (qlineargradient / qradialgradient, not CSS syntax)

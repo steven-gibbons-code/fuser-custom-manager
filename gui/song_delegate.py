@@ -14,15 +14,31 @@ ART_RADIUS = 10
 ROW_RADIUS = 14
 
 _PALETTES = [
-    ("#5b2d8a", "#ff5e9e"),
-    ("#ff5e9e", "#ff8a5b"),
-    ("#4fc3f7", "#5b2d8a"),
-    ("#66bb6a", "#ffd54f"),
-    ("#ef5350", "#ff8a5b"),
-    ("#c14fff", "#ff5e9e"),
-    ("#ff8a5b", "#ffd54f"),
-    ("#4fc3f7", "#66bb6a"),
+    (TOKENS["selection_purple"], TOKENS["accent_pink"]),
+    (TOKENS["accent_pink"],      TOKENS["accent_orange"]),
+    (TOKENS["stem_dj"],          TOKENS["selection_purple"]),
+    (TOKENS["stem_bass"],        TOKENS["stem_synth"]),
+    (TOKENS["danger"],           TOKENS["accent_orange"]),
+    (TOKENS["accent_purple"],    TOKENS["accent_pink"]),
+    (TOKENS["accent_orange"],    TOKENS["accent_yellow"]),
+    (TOKENS["stem_dj"],          TOKENS["stem_bass"]),
 ]
+
+# Module-level font cache — avoids allocating QFont objects on every paint call
+_FONT_TITLE = QFont("Sora", 11)
+_FONT_TITLE.setWeight(QFont.Weight.DemiBold)
+
+_FONT_SUB = QFont("Sora", 9)
+_FONT_SUB.setWeight(QFont.Weight.Medium)
+
+_FONT_BPM = QFont("Sora", 13)
+_FONT_BPM.setWeight(QFont.Weight.DemiBold)
+
+_FONT_BPM_CAP = QFont("Sora", 8)
+_FONT_BPM_CAP.setWeight(QFont.Weight.Medium)
+
+_FONT_PILL = QFont("Sora", 8)
+_FONT_PILL.setWeight(QFont.Weight.Bold)
 
 
 def _rgba(token_str: str) -> QColor:
@@ -127,49 +143,40 @@ class SongRowDelegate(QStyledItemDelegate):
         bpm_w     = 70
         text_right = card.right() - pill_w - bpm_w - 28
 
-        title_font = QFont("Sora", 11)
-        title_font.setWeight(QFont.Weight.DemiBold)
-        p.setFont(title_font)
+        p.setFont(_FONT_TITLE)
         p.setPen(C("fg_white"))
-        fm = QFontMetrics(title_font)
+        fm = QFontMetrics(_FONT_TITLE)
         title = fm.elidedText(
             song.get("title", "—"), Qt.TextElideMode.ElideRight,
             int(text_right - text_x),
         )
         p.drawText(int(text_x), int(card.top() + 24), title)
 
-        sub_font = QFont("Sora", 9)
-        sub_font.setWeight(QFont.Weight.Medium)
-        p.setFont(sub_font)
+        p.setFont(_FONT_SUB)
         p.setPen(C("fg_muted"))
         bits = [song.get("artist", ""), song.get("source", ""), song.get("key", "")]
         sub = " · ".join(b for b in bits if b)
-        fm = QFontMetrics(sub_font)
+        fm = QFontMetrics(_FONT_SUB)
         sub = fm.elidedText(sub, Qt.TextElideMode.ElideRight, int(text_right - text_x))
         p.drawText(int(text_x), int(card.top() + 44), sub)
 
         # ── Quality pill ────────────────────────────────────────
         pill_x = card.right() - pill_w - bpm_w - 14
         pill_y = card.center().y() - 11
-        self._draw_pill(p, pill_x, pill_y, pill_w, 22,
-                        song.get("quality", "Other"), installed)
+        self._draw_pill(p, pill_x, pill_y, pill_w, 22, song.get("quality", "Other"))
 
         # ── BPM block ───────────────────────────────────────────
         bpm_x = card.right() - bpm_w - 4
-        big = QFont("Sora", 13)
-        big.setWeight(QFont.Weight.DemiBold)
-        p.setFont(big)
+        p.setFont(_FONT_BPM)
         p.setPen(C("fg_white"))
         p.drawText(int(bpm_x), int(card.top() + 28), str(song.get("bpm") or "—"))
-        cap = QFont("Sora", 8)
-        cap.setWeight(QFont.Weight.Medium)
-        p.setFont(cap)
+        p.setFont(_FONT_BPM_CAP)
         p.setPen(C("fg_tertiary"))
         p.drawText(int(bpm_x), int(card.top() + 44), "BPM")
 
         p.restore()
 
-    def _draw_pill(self, p: QPainter, x, y, w, h, quality: str, installed: bool):
+    def _draw_pill(self, p: QPainter, x, y, w, h, quality: str):
         bg_key, fg_key = {
             "Official":   ("tier_official_bg",   "tier_official_fg"),
             "Definitive": ("tier_definitive_bg", "tier_definitive_fg"),
@@ -183,9 +190,7 @@ class SongRowDelegate(QStyledItemDelegate):
         path.addRoundedRect(x, y, w, h, h / 2, h / 2)
         p.fillPath(path, bg)
 
-        f = QFont("Sora", 8)
-        f.setWeight(QFont.Weight.Bold)
-        p.setFont(f)
+        p.setFont(_FONT_PILL)
         p.setPen(fg)
         p.drawText(
             QRect(int(x), int(y), int(w), int(h)),

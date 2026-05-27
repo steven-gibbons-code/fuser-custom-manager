@@ -98,3 +98,68 @@ def test_complete_field_mapped(qtbot):
     qtbot.addWidget(panel)
     panel.show({**SONG, "complete": "D"})
     assert panel._labels["complete"].text() == "Definitive"
+
+
+# ── Pills row ──────────────────────────────────────────────────────────────
+
+def test_quality_pill_shows_tier_text(qtbot):
+    panel = DetailPanel()
+    qtbot.addWidget(panel)
+    panel.show(SONG)
+    assert panel._quality_pill.text() == "Complete"
+
+
+def test_quality_pill_uses_tier_color(qtbot):
+    from gui.tokens import TOKENS
+    panel = DetailPanel()
+    qtbot.addWidget(panel)
+    panel.show(SONG)
+    style = panel._quality_pill.styleSheet()
+    assert TOKENS["tier_complete_bg"] in style
+
+
+def test_quality_pill_not_green_when_installed(qtbot):
+    panel = DetailPanel()
+    qtbot.addWidget(panel)
+    panel.show(INSTALLED_SONG)
+    # installed state shows card tint in the delegate, not a green pill
+    assert "✓" not in panel._quality_pill.text()
+    assert panel._quality_pill.text() == "Complete"
+
+
+def test_key_pill_shows_value(qtbot):
+    panel = DetailPanel()
+    qtbot.addWidget(panel)
+    panel.show(SONG)
+    assert panel._key_pill.text() == "A Minor"
+
+
+def test_key_pill_shows_dash_when_empty(qtbot):
+    panel = DetailPanel()
+    qtbot.addWidget(panel)
+    panel.show({**SONG, "key": None})
+    assert panel._key_pill.text() == "—"
+
+
+def test_bpm_pill_shows_value(qtbot):
+    panel = DetailPanel()
+    qtbot.addWidget(panel)
+    panel.show(SONG)
+    assert panel._bpm_pill.text() == "116 BPM"
+
+
+def test_bpm_pill_shows_dash_when_missing(qtbot):
+    panel = DetailPanel()
+    qtbot.addWidget(panel)
+    panel.show({**SONG, "bpm": None})
+    assert panel._bpm_pill.text() == "—"
+
+
+def test_clear_resets_all_pills(qtbot):
+    panel = DetailPanel()
+    qtbot.addWidget(panel)
+    panel.show(SONG)
+    panel.clear()
+    assert panel._quality_pill.text() == "—"
+    assert panel._key_pill.text() == "—"
+    assert panel._bpm_pill.text() == "—"

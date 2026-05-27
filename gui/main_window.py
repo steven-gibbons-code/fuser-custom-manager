@@ -66,7 +66,7 @@ class FuserApp(QMainWindow):
         root.addWidget(self.filter_bar)
 
         self._fuser_lbl = FuserLabel("FUSER", pt_size=22)
-        self.filter_bar._top_layout.insertWidget(0, self._fuser_lbl)
+        self.filter_bar.prepend_to_toolbar(self._fuser_lbl)
 
         self._model = SongTableModel()
         self.song_table = SongTableView()
