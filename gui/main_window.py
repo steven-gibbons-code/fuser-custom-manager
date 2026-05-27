@@ -63,6 +63,7 @@ class FuserApp(QMainWindow):
         self._batch_btn = QPushButton("☰ Batch Mode")
         self._batch_btn.clicked.connect(self._enter_batch_mode)
         self.filter_bar.add_to_toolbar(self._batch_btn)
+        self.filter_bar.add_to_toolbar(self.filter_bar._settings_btn)
         root.addWidget(self.filter_bar)
 
         self._fuser_lbl = FuserLabel("FUSER", pt_size=22)

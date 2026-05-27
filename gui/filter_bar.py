@@ -38,23 +38,29 @@ class FilterBar(QWidget):
         top_layout.setContentsMargins(8, 6, 8, 6)
         top_layout.setSpacing(6)
 
+        # Left stretch — FuserLabel will be prepended before this by main_window
+        top_layout.addStretch()
+
         top_layout.addWidget(QLabel("Search"))
         self._search = QLineEdit()
         self._search.setPlaceholderText("Artist, title, genre…")
         self._search.setFixedWidth(240)
         top_layout.addWidget(self._search)
+
+        # Right stretch — centers search between FuserLabel and action buttons
         top_layout.addStretch()
 
         self._updated_lbl = QLabel("")
         self._updated_lbl.setObjectName("updatedLabel")
         top_layout.addWidget(self._updated_lbl)
 
-        self._refresh_btn = QPushButton("Refresh Sources")
+        self._refresh_btn = QPushButton("↻ Refresh Sources")
         self._refresh_btn.setObjectName("primaryBtn")
         top_layout.addWidget(self._refresh_btn)
 
+        # Settings button stored but NOT added here — main_window inserts batch
+        # between refresh and settings to get: Refresh > Batch > Settings
         self._settings_btn = QPushButton("⚙ Settings")
-        top_layout.addWidget(self._settings_btn)
 
         outer.addWidget(top)
 
@@ -184,4 +190,4 @@ class FilterBar(QWidget):
 
     def set_refresh_enabled(self, enabled: bool):
         self._refresh_btn.setEnabled(enabled)
-        self._refresh_btn.setText("Refreshing…" if not enabled else "Refresh Sources")
+        self._refresh_btn.setText("Refreshing…" if not enabled else "↻ Refresh Sources")

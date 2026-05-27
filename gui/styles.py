@@ -60,12 +60,11 @@ QComboBox:focus {{
 }}
 QComboBox::drop-down {{
     border: none;
-    width: 18px;
+    width: 20px;
 }}
 QComboBox::down-arrow {{
-    image: none;
-    width: 0;
-    height: 0;
+    width: 8px;
+    height: 8px;
 }}
 QComboBox QAbstractItemView {{
     background: {surface_2};
