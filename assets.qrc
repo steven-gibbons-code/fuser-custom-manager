@@ -1,0 +1,21 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="fonts/Sora-VariableFont_wght.ttf">assets/fonts/Sora-VariableFont_wght.ttf</file>
+    <file alias="icons/instruments/drums.png">assets/icons/instruments/drums.png</file>
+    <file alias="icons/instruments/guitar.png">assets/icons/instruments/guitar.png</file>
+    <file alias="icons/instruments/horns.png">assets/icons/instruments/horns.png</file>
+    <file alias="icons/instruments/piano.png">assets/icons/instruments/piano.png</file>
+    <file alias="icons/instruments/strings.png">assets/icons/instruments/strings.png</file>
+    <file alias="icons/instruments/synth-piano.png">assets/icons/instruments/synth-piano.png</file>
+    <file alias="icons/instruments/synth.png">assets/icons/instruments/synth.png</file>
+    <file alias="icons/instruments/vocals.png">assets/icons/instruments/vocals.png</file>
+    <file alias="icons/utility/achievements.png">assets/icons/utility/achievements.png</file>
+    <file alias="icons/utility/display.png">assets/icons/utility/display.png</file>
+    <file alias="icons/utility/notice.png">assets/icons/utility/notice.png</file>
+    <file alias="icons/utility/parameters.png">assets/icons/utility/parameters.png</file>
+    <file alias="icons/utility/riser.png">assets/icons/utility/riser.png</file>
+    <file alias="icons/utility/settings.png">assets/icons/utility/settings.png</file>
+    <file alias="icons/utility/store.png">assets/icons/utility/store.png</file>
+    <file alias="icons/utility/volume.png">assets/icons/utility/volume.png</file>
+  </qresource>
+</RCC>
