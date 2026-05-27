@@ -63,8 +63,9 @@ QComboBox::drop-down {{
     width: 20px;
 }}
 QComboBox::down-arrow {{
-    width: 8px;
-    height: 8px;
+    image: url(:/icons/utility/chevron-down.svg);
+    width: 10px;
+    height: 6px;
 }}
 QComboBox QAbstractItemView {{
     background: {surface_2};

@@ -14,6 +14,7 @@
     <file alias="icons/utility/notice.png">assets/icons/utility/notice.png</file>
     <file alias="icons/utility/parameters.png">assets/icons/utility/parameters.png</file>
     <file alias="icons/utility/riser.png">assets/icons/utility/riser.png</file>
+    <file alias="icons/utility/chevron-down.svg">assets/icons/utility/chevron-down.svg</file>
     <file alias="icons/utility/settings.png">assets/icons/utility/settings.png</file>
     <file alias="icons/utility/store.png">assets/icons/utility/store.png</file>
     <file alias="icons/utility/volume.png">assets/icons/utility/volume.png</file>
