@@ -242,9 +242,8 @@ class DetailPanel(QScrollArea):
             return
         has_art = (ART_DIR / f"{self._song['id']}.jpg").exists()
         self._art_overlay_btn.setVisible(not has_art)
-        if has_art:
-            self._art_spinner_lbl.hide()
-            self._spinner_timer.stop()
+        self._art_spinner_lbl.hide()
+        self._spinner_timer.stop()
 
     def _on_fetch_art_clicked(self):
         if not self._song:
