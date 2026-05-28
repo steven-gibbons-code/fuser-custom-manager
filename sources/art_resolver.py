@@ -15,7 +15,10 @@ _mb_last_call = 0.0
 
 
 def _mb_throttle() -> None:
-    """Enforce 1 req/sec globally across all threads for MusicBrainz API calls."""
+    """Enforce 1 req/sec globally across all threads for MusicBrainz API calls.
+
+    The lock is held during sleep so threads queue in strict single-file order.
+    """
     global _mb_last_call
     with _mb_lock:
         now = time.time()
