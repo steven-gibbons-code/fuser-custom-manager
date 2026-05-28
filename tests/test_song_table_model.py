@@ -57,3 +57,32 @@ def test_reset_replaces_rows(qtbot):
     model.reset([SONGS[0]])
     assert model.rowCount() == 1
     assert model.get_row(0)["title"] == "Get Lucky"
+
+
+def test_song_table_view_emits_visible_songs_on_scroll(qtbot):
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from PySide6.QtWidgets import QApplication
+    from gui.song_table import SongTableModel, SongTableView
+
+    _app = QApplication.instance() or QApplication([])
+
+    model = SongTableModel()
+    model.reset([
+        {"id": 1, "artist": "A", "title": "X"},
+        {"id": 2, "artist": "B", "title": "Y"},
+    ])
+
+    view = SongTableView()
+    view.resize(400, 600)
+
+    emitted = []
+    view.visibleSongsChanged.connect(lambda ids: emitted.extend(ids))
+
+    view.set_model(model)
+    view.show()
+    qtbot.addWidget(view)
+
+    assert len(emitted) > 0
+    assert all(isinstance(sid, int) for sid in emitted)

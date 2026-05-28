@@ -1,4 +1,4 @@
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QSize
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QSize, Signal
 from PySide6.QtWidgets import QTableView, QAbstractItemView
 
 
@@ -33,6 +33,8 @@ class SongTableModel(QAbstractTableModel):
 
 
 class SongTableView(QTableView):
+    visibleSongsChanged = Signal(list)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -49,6 +51,28 @@ class SongTableView(QTableView):
         self.setItemDelegate(SongRowDelegate(self))
         self.verticalHeader().setDefaultSectionSize(ROW_HEIGHT + 6)
         self.horizontalHeader().setStretchLastSection(True)
+        model.modelReset.connect(self._emit_visible_songs)
+        self.verticalScrollBar().valueChanged.connect(self._emit_visible_songs)
+        self._emit_visible_songs()
+
+    def _emit_visible_songs(self) -> None:
+        if self.model() is None:
+            return
+        vp = self.viewport()
+        first = self.rowAt(0)
+        if first < 0:
+            return
+        last = self.rowAt(vp.height() - 1)
+        if last < 0:
+            last = self.model().rowCount() - 1
+        song_ids = []
+        for row in range(first, last + 1):
+            idx = self.model().index(row, 0)
+            song = idx.data(Qt.ItemDataRole.UserRole)
+            if song and "id" in song:
+                song_ids.append(song["id"])
+        if song_ids:
+            self.visibleSongsChanged.emit(song_ids)
 
     def get_selected_songs(self) -> list[dict]:
         if self.model() is None:
