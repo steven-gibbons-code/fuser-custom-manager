@@ -50,6 +50,12 @@ class StatusBar(QWidget):
         self._progress.setValue(100)
         self._idle_timer.start(3000)
 
+    def start_art_resolve(self, total: int) -> None:
+        self._lbl.setText(f"Looking up art… (0/{total})")
+        self._lbl.setStyleSheet(f"color: {TOKENS['fg_muted']}; background: transparent;")
+        self._progress.setValue(0)
+        self._progress.show()
+
     def set_error(self, msg: str):
         self._lbl.setText(f"Error: {msg}")
         self._lbl.setStyleSheet(f"color: {TOKENS['danger']}; background: transparent;")

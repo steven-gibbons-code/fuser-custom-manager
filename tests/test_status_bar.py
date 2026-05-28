@@ -75,3 +75,12 @@ def test_set_idle(qtbot):
     bar.set_idle()
     assert bar._lbl.text() == "Ready"
     assert not bar._progress.isVisible()
+
+
+def test_start_art_resolve_shows_progress_bar_and_label(qtbot):
+    from gui.status_bar import StatusBar
+    bar = StatusBar()
+    qtbot.addWidget(bar)
+    bar.start_art_resolve(47)
+    assert not bar._progress.isHidden()
+    assert "47" in bar._lbl.text()
