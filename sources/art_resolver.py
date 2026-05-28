@@ -1,5 +1,6 @@
 import time
 import sqlite3
+import threading
 import requests
 
 from db import update_art_url
@@ -9,21 +10,25 @@ _MB_URL = "https://musicbrainz.org/ws/2/release"
 _CAA_URL = "https://coverartarchive.org/release/{mbid}/front-250"
 _USER_AGENT = "FuserCustomTool/1.0 (sgibb.code@gmail.com)"
 
-_last_call = 0.0
+_mb_lock = threading.Lock()
+_mb_last_call = 0.0
 
 
-def _throttle():
-    global _last_call
-    elapsed = time.time() - _last_call
-    if elapsed < 1.0:
-        time.sleep(1.0 - elapsed)
-    _last_call = time.time()
+def _mb_throttle() -> None:
+    """Enforce 1 req/sec globally across all threads for MusicBrainz API calls."""
+    global _mb_last_call
+    with _mb_lock:
+        now = time.time()
+        wait = 1.0 - (now - _mb_last_call)
+        if wait > 0:
+            time.sleep(wait)
+        _mb_last_call = time.time()
 
 
 def musicbrainz_lookup(artist: str, title: str) -> str | None:
     """Return a Cover Art Archive image URL for the given artist+title, or None."""
     try:
-        _throttle()
+        _mb_throttle()
         resp = requests.get(
             _MB_URL,
             params={"query": f'artist:"{artist}" recording:"{title}"', "fmt": "json", "limit": 5},
@@ -37,7 +42,7 @@ def musicbrainz_lookup(artist: str, title: str) -> str | None:
             return None
         mbid = releases[0]["id"]
 
-        _throttle()
+        _mb_throttle()
         caa_resp = requests.get(
             _CAA_URL.format(mbid=mbid),
             headers={"User-Agent": _USER_AGENT},

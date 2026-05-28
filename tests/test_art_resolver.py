@@ -144,3 +144,30 @@ def test_bulk_resolve_leaves_null_when_all_sources_fail(tmp_path):
 
     row = conn.execute("SELECT art_url FROM songs").fetchone()
     assert row[0] is None
+
+
+def test_mb_throttle_serializes_calls():
+    import threading, time
+    from sources.art_resolver import _mb_throttle
+    import sources.art_resolver as art_resolver_mod
+
+    # Reset state
+    art_resolver_mod._mb_last_call = 0.0
+
+    call_times = []
+
+    def call():
+        _mb_throttle()
+        call_times.append(time.time())
+
+    threads = [threading.Thread(target=call) for _ in range(3)]
+    t0 = time.time()
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    call_times.sort()
+    # Each successive call should be at least 0.9s after the previous
+    assert call_times[1] - call_times[0] >= 0.9
+    assert call_times[2] - call_times[1] >= 0.9
