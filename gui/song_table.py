@@ -47,15 +47,21 @@ class SongTableView(QTableView):
 
     def set_model(self, model: SongTableModel):
         from gui.song_delegate import SongRowDelegate, ROW_HEIGHT
+        old_model = self.model()
+        if old_model is not None:
+            old_model.modelReset.disconnect(self.emit_visible_songs)
         self.setModel(model)
         self.setItemDelegate(SongRowDelegate(self))
         self.verticalHeader().setDefaultSectionSize(ROW_HEIGHT + 6)
         self.horizontalHeader().setStretchLastSection(True)
-        model.modelReset.connect(self._emit_visible_songs)
-        self.verticalScrollBar().valueChanged.connect(self._emit_visible_songs)
-        self._emit_visible_songs()
+        model.modelReset.connect(self.emit_visible_songs)
+        self.verticalScrollBar().valueChanged.connect(
+            self.emit_visible_songs, Qt.ConnectionType.UniqueConnection
+        )
+        # Fire once so any listener connected before set_model gets the initial visible set.
+        self.emit_visible_songs()
 
-    def _emit_visible_songs(self) -> None:
+    def emit_visible_songs(self) -> None:
         if self.model() is None:
             return
         vp = self.viewport()

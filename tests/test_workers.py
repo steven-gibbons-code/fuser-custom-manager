@@ -365,6 +365,33 @@ def test_parallel_art_worker_emits_finished_with_no_pending(qtbot, tmp_path):
             worker.start()
 
 
+def test_parallel_art_worker_stop_terminates_gracefully(qtbot, tmp_path):
+    import sqlite3
+    from gui.workers import ParallelArtWorker
+
+    art_dir = tmp_path / "art"
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.executescript("""
+        CREATE TABLE songs (
+            id INTEGER PRIMARY KEY, artist TEXT, title TEXT,
+            art_url TEXT, source TEXT
+        );
+        INSERT INTO songs VALUES (1, 'Artist A', 'Song X', NULL, 'fucuco');
+    """)
+
+    with patch("gui.workers.ART_DIR", art_dir), \
+         patch("gui.workers.gdrive_art_lookup", return_value=None), \
+         patch("gui.workers.musicbrainz_lookup", return_value=None):
+        worker = ParallelArtWorker(conn, n_resolve=1, n_download=1)
+        worker.start()
+        worker.stop()
+        with qtbot.waitSignal(worker.finished, timeout=5000):
+            pass
+
+    assert worker._cancel.is_set()
+
+
 def test_parallel_art_worker_prioritize_promotes_songs(tmp_path):
     import sqlite3
     from gui.workers import ParallelArtWorker

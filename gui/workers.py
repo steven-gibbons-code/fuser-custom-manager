@@ -97,6 +97,9 @@ class ParallelArtWorker(QThread):
 
     @Slot(list)
     def prioritize(self, song_ids: list) -> None:
+        # _songs_by_id is written once in run() before the thread pool starts.
+        # Calls from the main thread after start() see either an empty dict or
+        # a fully-populated one; CPython's GIL makes partial reads safe.
         self._pq.promote(song_ids, self._songs_by_id)
 
     def stop(self) -> None:
@@ -105,6 +108,7 @@ class ParallelArtWorker(QThread):
 
     def run(self) -> None:
         ART_DIR.mkdir(parents=True, exist_ok=True)
+        self.status.emit("Resolving art…")
 
         rows = self._conn.execute(
             "SELECT id, artist, title FROM songs "
@@ -121,8 +125,7 @@ class ParallelArtWorker(QThread):
             if not (ART_DIR / f"{r['id']}.jpg").exists()
         ]
 
-        total = len(pending_resolve) + len(pending_download)
-        if total == 0:
+        if not pending_resolve and not pending_download:
             self.finished.emit()
             return
 
@@ -198,7 +201,7 @@ class ParallelArtWorker(QThread):
                     song_id = result_q.get(timeout=0.1)
                     completed[0] += 1
                     self.art_ready.emit(song_id)
-                    self.status.emit(f"Fetching art… ({completed[0]}/{total})")
+                    self.status.emit(f"Fetching art… ({completed[0]})")
                 except queue.Empty:
                     pass
 

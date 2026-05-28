@@ -280,7 +280,7 @@ class FuserApp(QMainWindow):
         )
         self._art_worker = worker
         worker.start()
-        self.song_table._emit_visible_songs()
+        self.song_table.emit_visible_songs()
 
     def _on_art_ready(self, song_id: int):
         QPixmapCache.remove(f"art_{song_id}_48")
