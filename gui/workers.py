@@ -388,28 +388,42 @@ class SingleArtWorker(QThread):
     def run(self):
         try:
             song_id = self._song["id"]
-            art_url = self._song.get("art_url")
+            album_art_id = self._song.get("album_art_id")
+            art_url = None
 
-            if art_url is None:
-                self.status.emit("Looking up art…")
-                art_url = musicbrainz_lookup(self._song["artist"], self._song["title"])
-                if not art_url:
-                    art_url = gdrive_art_lookup(
+            if album_art_id is None:
+                self.status.emit("Looking up art… (1/1)")
+                itunes_result = itunes_lookup(self._song["artist"], self._song["title"])
+                if itunes_result:
+                    album_name, art_url = itunes_result
+                else:
+                    gdrive_url = gdrive_art_lookup(
                         self._song["artist"], status_cb=self.status.emit
                     )
-                if art_url:
-                    update_art_url(self._conn, song_id, art_url)
+                    if gdrive_url:
+                        album_name, art_url = "__artist__", gdrive_url
+                    else:
+                        self.finished.emit(song_id)
+                        return
 
-            if art_url:
-                dest = ART_DIR / f"{song_id}.jpg"
-                if not dest.exists():
-                    self.status.emit("Downloading art…")
-                    ART_DIR.mkdir(parents=True, exist_ok=True)
-                    resp = requests.get(
-                        art_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"}
-                    )
-                    if resp.status_code == 200:
-                        dest.write_bytes(resp.content)
+                album_art_id = get_or_create_album_art(
+                    self._conn, self._song["artist"], album_name, art_url
+                )
+                link_song_album_art(self._conn, song_id, album_art_id)
+
+            dest = ART_DIR / f"{album_art_id}.jpg"
+            if not dest.exists():
+                self.status.emit("Downloading art…")
+                ART_DIR.mkdir(parents=True, exist_ok=True)
+                if art_url is None:
+                    art_url = self._conn.execute(
+                        "SELECT art_url FROM album_art WHERE id = ?", (album_art_id,)
+                    ).fetchone()[0]
+                resp = requests.get(
+                    art_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"}
+                )
+                if resp.status_code == 200:
+                    dest.write_bytes(resp.content)
 
             self.finished.emit(song_id)
         except Exception as exc:

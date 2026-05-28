@@ -170,61 +170,88 @@ def test_art_resolve_worker_calls_bulk_resolve_with_progress_cb(qtbot):
     assert callable(kwargs.get("progress_cb"))
 
 
-def test_single_art_worker_resolves_and_downloads(tmp_path):
+def test_single_art_worker_emits_error_on_failure(tmp_path):
     art_dir = tmp_path / "art"
     conn = MagicMock()
-    song = {"id": 42, "artist": "Daft Punk", "title": "Get Lucky", "art_url": None}
+    song = {"id": 99, "artist": "Daft Punk", "title": "Get Lucky", "album_art_id": None}
+    errors = []
+
+    with patch("gui.workers.ART_DIR", art_dir), \
+         patch("gui.workers.itunes_lookup", side_effect=Exception("network error")):
+        worker = SingleArtWorker(song, conn)
+        worker.error.connect(lambda e: errors.append(e))
+        worker.run()
+
+    assert errors and "network error" in errors[0]
+
+
+def test_single_art_worker_resolves_via_itunes_and_downloads(tmp_path):
+    art_dir = tmp_path / "art"
+    import sqlite3
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.executescript("""
+        CREATE TABLE album_art (
+            id INTEGER PRIMARY KEY, artist TEXT NOT NULL, album TEXT NOT NULL,
+            art_url TEXT, UNIQUE(artist, album)
+        );
+        CREATE TABLE songs (
+            id INTEGER PRIMARY KEY, artist TEXT, title TEXT,
+            album_art_id INTEGER, source TEXT
+        );
+        INSERT INTO songs VALUES (42, 'Daft Punk', 'Get Lucky', NULL, 'fucuco');
+    """)
+    song = {"id": 42, "artist": "Daft Punk", "title": "Get Lucky", "album_art_id": None}
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.content = b"FAKEIMAGE"
     collected = []
 
     with patch("gui.workers.ART_DIR", art_dir), \
-         patch("gui.workers.musicbrainz_lookup", return_value="http://mb.com/art.jpg"), \
+         patch("gui.workers.itunes_lookup", return_value=("RAM", "http://itunes.com/art.jpg")), \
          patch("gui.workers.requests.get", return_value=mock_resp), \
-         patch("gui.workers.update_art_url") as mock_update:
+         patch("gui.workers.get_or_create_album_art", return_value=7) as mock_create, \
+         patch("gui.workers.link_song_album_art") as mock_link:
         worker = SingleArtWorker(song, conn)
         worker.finished.connect(lambda sid: collected.append(sid))
         worker.run()
 
-    assert (art_dir / "42.jpg").exists()
-    assert (art_dir / "42.jpg").read_bytes() == b"FAKEIMAGE"
-    assert collected == [42]
-    mock_update.assert_called_once_with(conn, 42, "http://mb.com/art.jpg")
-
-
-def test_single_art_worker_skips_resolve_when_art_url_exists(tmp_path):
-    art_dir = tmp_path / "art"
-    conn = MagicMock()
-    song = {"id": 7, "artist": "Daft Punk", "title": "Get Lucky",
-            "art_url": "http://existing.com/art.jpg"}
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.content = b"FAKEIMAGE"
-
-    with patch("gui.workers.ART_DIR", art_dir), \
-         patch("gui.workers.musicbrainz_lookup") as mock_mb, \
-         patch("gui.workers.requests.get", return_value=mock_resp):
-        worker = SingleArtWorker(song, conn)
-        worker.run()
-
-    mock_mb.assert_not_called()
     assert (art_dir / "7.jpg").exists()
+    assert collected == [42]
+    mock_link.assert_called_once_with(conn, 42, 7)
 
 
-def test_single_art_worker_emits_error_on_failure(tmp_path):
+def test_single_art_worker_skips_resolve_when_album_art_id_exists(tmp_path):
     art_dir = tmp_path / "art"
+    art_dir.mkdir()
+    (art_dir / "5.jpg").write_bytes(b"CACHED")
     conn = MagicMock()
-    song = {"id": 99, "artist": "Daft Punk", "title": "Get Lucky", "art_url": None}
-    errors = []
+    song = {"id": 7, "artist": "Daft Punk", "title": "Get Lucky", "album_art_id": 5}
 
     with patch("gui.workers.ART_DIR", art_dir), \
-         patch("gui.workers.musicbrainz_lookup", side_effect=Exception("network error")):
+         patch("gui.workers.itunes_lookup") as mock_itunes, \
+         patch("gui.workers.requests.get") as mock_get:
         worker = SingleArtWorker(song, conn)
-        worker.error.connect(lambda e: errors.append(e))
         worker.run()
 
-    assert errors and "network error" in errors[0]
+    mock_itunes.assert_not_called()
+    mock_get.assert_not_called()
+
+
+def test_single_art_worker_emits_finished_when_no_art_found(tmp_path):
+    art_dir = tmp_path / "art"
+    conn = MagicMock()
+    song = {"id": 99, "artist": "Daft Punk", "title": "Get Lucky", "album_art_id": None}
+    collected = []
+
+    with patch("gui.workers.ART_DIR", art_dir), \
+         patch("gui.workers.itunes_lookup", return_value=None), \
+         patch("gui.workers.gdrive_art_lookup", return_value=None):
+        worker = SingleArtWorker(song, conn)
+        worker.finished.connect(lambda sid: collected.append(sid))
+        worker.run()
+
+    assert collected == [99]
 
 
 def test_art_priority_queue_foreground_before_background():
