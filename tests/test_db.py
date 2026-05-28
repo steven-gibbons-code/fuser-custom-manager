@@ -4,7 +4,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from db import (init_db, upsert_songs, get_songs, mark_installed,
                 mark_uninstalled, get_installed, get_setting, set_setting,
-                get_songs_with_art_url, update_art_url, count_pending_art, ART_DIR)
+                get_songs_with_art_url, update_art_url, count_pending_art, ART_DIR,
+                get_or_create_album_art, link_song_album_art, get_songs_pending_art)
 
 SONG = {
     "source": "fucuco_main", "artist": "Daft Punk", "title": "Get Lucky",
@@ -13,6 +14,15 @@ SONG = {
     "complete_notes": "", "stream_opt": 1, "origin": None,
     "link": "https://drive.google.com/file/d/abc", "link_host": "gdrive",
     "last_seen": "2026-05-05",
+}
+
+SONG_FSL = {
+    "source": "fusersoundlab", "artist": "Daft Punk", "title": "Get Lucky",
+    "creator": "DJTest", "genre": "Pop", "year": 2013, "bpm": 116,
+    "key": "A Minor", "de_status": "Eligible", "complete": "C",
+    "complete_notes": "", "stream_opt": 1, "origin": None,
+    "link": "https://fsl.com/1", "link_host": "fsl",
+    "last_seen": "2026-05-28",
 }
 
 @pytest.fixture
@@ -275,31 +285,11 @@ def test_art_url_column_exists_after_migration(tmp_path):
     cols = {row[1] for row in conn.execute("PRAGMA table_info(songs)").fetchall()}
     assert "art_url" in cols
 
-def test_upsert_preserves_art_url_on_resync(tmp_path):
+def test_art_url_column_still_exists_for_compat(tmp_path):
+    # art_url column still exists for backward compat; upsert no longer writes it
     conn = init_db(tmp_path / "test.db")
-    song = {**SONG, "art_url": "http://example.com/art.jpg"}
-    upsert_songs(conn, [song])
-    # Re-sync with art_url=None — existing URL must be preserved
-    upsert_songs(conn, [{**SONG, "art_url": None}])
-    row = conn.execute("SELECT art_url FROM songs").fetchone()
-    assert row[0] == "http://example.com/art.jpg"
-
-def test_upsert_updates_art_url_when_new_value_provided(tmp_path):
-    conn = init_db(tmp_path / "test.db")
-    upsert_songs(conn, [{**SONG, "art_url": "http://example.com/old.jpg"}])
-    upsert_songs(conn, [{**SONG, "art_url": "http://example.com/new.jpg"}])
-    row = conn.execute("SELECT art_url FROM songs").fetchone()
-    assert row[0] == "http://example.com/new.jpg"
-
-def test_get_songs_with_art_url_returns_only_songs_with_url(tmp_path):
-    conn = init_db(tmp_path / "test.db")
-    s_with = {**SONG, "art_url": "http://img.com/a.jpg"}
-    s_without = {**SONG, "title": "No Art", "link": "https://drive.google.com/file/d/xyz2",
-                 "art_url": None}
-    upsert_songs(conn, [s_with, s_without])
-    result = get_songs_with_art_url(conn)
-    assert len(result) == 1
-    assert result[0]["art_url"] == "http://img.com/a.jpg"
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(songs)").fetchall()}
+    assert "art_url" in cols
 
 def test_update_art_url_sets_value(tmp_path):
     conn = init_db(tmp_path / "test.db")
@@ -315,13 +305,102 @@ def test_art_dir_is_under_fuser_manager():
 
 def test_count_pending_art_excludes_fsl_and_resolved(conn):
     upsert_songs(conn, [
-        {**SONG, "source": "fucuco_main", "art_url": None,                          "title": "Pending", "link": "https://drive.google.com/file/d/pending1"},
-        {**SONG, "source": "fucuco_main", "art_url": "http://example.com/a.jpg",    "title": "Resolved", "link": "https://drive.google.com/file/d/resolved1"},
-        {**SONG, "source": "fusersoundlab", "art_url": None,                        "title": "FSL", "link": "https://drive.google.com/file/d/fsl1"},
+        {**SONG, "source": "fucuco_main",   "title": "Pending",  "link": "https://drive.google.com/file/d/pending1"},
+        {**SONG, "source": "fucuco_main",   "title": "Resolved", "link": "https://drive.google.com/file/d/resolved1"},
+        {**SONG, "source": "fusersoundlab", "title": "FSL",      "link": "https://drive.google.com/file/d/fsl1"},
     ])
-    assert count_pending_art(conn) == 1  # only "Pending": fucuco + null art_url
+    # Link album_art_id for "Resolved"
+    resolved_id = conn.execute("SELECT id FROM songs WHERE title='Resolved'").fetchone()[0]
+    art_id = get_or_create_album_art(conn, "Daft Punk", "RAM", "http://example.com/a.jpg")
+    link_song_album_art(conn, resolved_id, art_id)
+    assert count_pending_art(conn) == 1  # only "Pending": fucuco + null album_art_id
 
 
 def test_count_pending_art_returns_zero_when_all_resolved(conn):
-    upsert_songs(conn, [{**SONG, "art_url": "http://example.com/art.jpg", "title": "Done"}])
+    upsert_songs(conn, [SONG])
+    song_id = conn.execute("SELECT id FROM songs").fetchone()[0]
+    art_id = get_or_create_album_art(conn, "Daft Punk", "RAM", "http://example.com/art.jpg")
+    link_song_album_art(conn, song_id, art_id)
     assert count_pending_art(conn) == 0
+
+
+def test_album_art_table_created(conn):
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    assert "album_art" in tables
+
+
+def test_get_or_create_album_art_inserts_new(conn):
+    art_id = get_or_create_album_art(conn, "Daft Punk", "Random Access Memories", "http://example.com/art.jpg")
+    assert isinstance(art_id, int)
+    row = conn.execute("SELECT artist, album, art_url FROM album_art WHERE id = ?", (art_id,)).fetchone()
+    assert row[0] == "Daft Punk"
+    assert row[1] == "Random Access Memories"
+    assert row[2] == "http://example.com/art.jpg"
+
+
+def test_get_or_create_album_art_returns_existing_id(conn):
+    id1 = get_or_create_album_art(conn, "Daft Punk", "Random Access Memories", "http://example.com/art.jpg")
+    id2 = get_or_create_album_art(conn, "Daft Punk", "Random Access Memories", "http://example.com/art.jpg")
+    assert id1 == id2
+    count = conn.execute("SELECT COUNT(*) FROM album_art").fetchone()[0]
+    assert count == 1
+
+
+def test_link_song_album_art(conn):
+    upsert_songs(conn, [SONG])
+    song_id = conn.execute("SELECT id FROM songs").fetchone()[0]
+    art_id = get_or_create_album_art(conn, "Daft Punk", "RAM", "http://example.com/art.jpg")
+    link_song_album_art(conn, song_id, art_id)
+    row = conn.execute("SELECT album_art_id FROM songs WHERE id = ?", (song_id,)).fetchone()
+    assert row[0] == art_id
+
+
+def test_get_songs_pending_art_excludes_fsl(conn):
+    upsert_songs(conn, [SONG, SONG_FSL])
+    pending = get_songs_pending_art(conn)
+    sources = {s["source"] for s in pending}
+    assert "fusersoundlab" not in sources
+    assert any(s["source"] == "fucuco_main" for s in pending)
+
+
+def test_get_songs_pending_art_excludes_linked(conn):
+    upsert_songs(conn, [SONG])
+    song_id = conn.execute("SELECT id FROM songs WHERE source='fucuco_main'").fetchone()[0]
+    art_id = get_or_create_album_art(conn, "Daft Punk", "RAM", "http://example.com/art.jpg")
+    link_song_album_art(conn, song_id, art_id)
+    pending = get_songs_pending_art(conn)
+    ids = {s["id"] for s in pending}
+    assert song_id not in ids
+
+
+def test_count_pending_art_uses_album_art_id(conn):
+    upsert_songs(conn, [SONG])
+    assert count_pending_art(conn) == 1
+    song_id = conn.execute("SELECT id FROM songs").fetchone()[0]
+    art_id = get_or_create_album_art(conn, "Daft Punk", "RAM", "http://example.com/art.jpg")
+    link_song_album_art(conn, song_id, art_id)
+    assert count_pending_art(conn) == 0
+
+
+def test_migration_wipes_old_art_files(tmp_path):
+    # First init — no album_art_id column yet, simulate old art files
+    import sqlite3
+    old_db = tmp_path / "test.db"
+    old_art_dir = tmp_path / "art"
+    old_art_dir.mkdir()
+    (old_art_dir / "1.jpg").write_bytes(b"OLD")
+    (old_art_dir / "2.jpg").write_bytes(b"OLD")
+
+    # Patch ART_DIR to our tmp art dir
+    import db as db_mod
+    original_art_dir = db_mod.ART_DIR
+    db_mod.ART_DIR = old_art_dir
+    try:
+        conn = init_db(old_db)
+        conn.close()
+        # After migration, old files should be gone
+        assert not (old_art_dir / "1.jpg").exists()
+        assert not (old_art_dir / "2.jpg").exists()
+    finally:
+        db_mod.ART_DIR = original_art_dir

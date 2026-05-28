@@ -35,6 +35,14 @@ CREATE TABLE IF NOT EXISTS songs (
     UNIQUE(source, link)
 );
 
+CREATE TABLE IF NOT EXISTS album_art (
+    id      INTEGER PRIMARY KEY,
+    artist  TEXT NOT NULL,
+    album   TEXT NOT NULL,
+    art_url TEXT,
+    UNIQUE(artist, album)
+);
+
 CREATE TABLE IF NOT EXISTS installed (
     id           INTEGER PRIMARY KEY,
     song_id      INTEGER UNIQUE REFERENCES songs(id) ON DELETE CASCADE,
@@ -129,11 +137,20 @@ def _migrate_add_columns(conn: sqlite3.Connection) -> None:
         ("quality",       "TEXT"),
         ("submit_date",   "TEXT"),
         ("art_url",       "TEXT"),
+        ("album_art_id",  "INTEGER REFERENCES album_art(id)"),
     ]
+    first_album_art_migration = "album_art_id" not in existing
     for col_name, col_type in new_cols:
         if col_name not in existing:
             conn.execute(f"ALTER TABLE songs ADD COLUMN {col_name} {col_type}")
     conn.commit()
+
+    if first_album_art_migration and ART_DIR.exists():
+        for f in ART_DIR.glob("*.jpg"):
+            try:
+                f.unlink()
+            except Exception:
+                pass
 
 
 def _needs_migration(conn: sqlite3.Connection) -> bool:
@@ -170,20 +187,17 @@ def upsert_songs(conn: sqlite3.Connection, songs: list[dict]) -> None:
         s.setdefault("disc4", None)
         s.setdefault("download_type", None)
         s.setdefault("submit_date", None)
-        s.setdefault("art_url", None)
         s["quality"] = derive_quality(s)
         enriched.append(s)
     conn.executemany("""
         INSERT INTO songs (source, artist, title, creator, genre, year, bpm, key,
                            de_status, complete, complete_notes, stream_opt, origin,
                            link, link_host, last_seen,
-                           disc1, disc2, disc3, disc4, download_type, quality, submit_date,
-                           art_url)
+                           disc1, disc2, disc3, disc4, download_type, quality, submit_date)
         VALUES (:source, :artist, :title, :creator, :genre, :year, :bpm, :key,
                 :de_status, :complete, :complete_notes, :stream_opt, :origin,
                 :link, :link_host, :last_seen,
-                :disc1, :disc2, :disc3, :disc4, :download_type, :quality, :submit_date,
-                :art_url)
+                :disc1, :disc2, :disc3, :disc4, :download_type, :quality, :submit_date)
         ON CONFLICT(source, link) DO UPDATE SET
             artist=excluded.artist, title=excluded.title,
             creator=excluded.creator, genre=excluded.genre, year=excluded.year,
@@ -194,8 +208,7 @@ def upsert_songs(conn: sqlite3.Connection, songs: list[dict]) -> None:
             disc1=excluded.disc1, disc2=excluded.disc2,
             disc3=excluded.disc3, disc4=excluded.disc4,
             download_type=excluded.download_type, quality=excluded.quality,
-            submit_date=COALESCE(excluded.submit_date, submit_date),
-            art_url=COALESCE(excluded.art_url, art_url)
+            submit_date=COALESCE(excluded.submit_date, submit_date)
     """, enriched)
     conn.commit()
 
@@ -302,7 +315,33 @@ def update_art_url(conn: sqlite3.Connection, song_id: int, url: str) -> None:
     conn.commit()
 
 
+def get_or_create_album_art(conn: sqlite3.Connection, artist: str, album: str, art_url: str) -> int:
+    # INSERT OR IGNORE: art_url is set once per album and not updated via this path
+    conn.execute(
+        "INSERT OR IGNORE INTO album_art (artist, album, art_url) VALUES (?, ?, ?)",
+        (artist, album, art_url),
+    )
+    conn.commit()
+    return conn.execute(
+        "SELECT id FROM album_art WHERE artist = ? AND album = ?",
+        (artist, album),
+    ).fetchone()[0]
+
+
+def link_song_album_art(conn: sqlite3.Connection, song_id: int, album_art_id: int) -> None:
+    conn.execute("UPDATE songs SET album_art_id = ? WHERE id = ?", (album_art_id, song_id))
+    conn.commit()
+
+
+def get_songs_pending_art(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        "SELECT id, artist, title, source FROM songs "
+        "WHERE album_art_id IS NULL AND source != 'fusersoundlab'"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def count_pending_art(conn: sqlite3.Connection) -> int:
     return conn.execute(
-        "SELECT COUNT(*) FROM songs WHERE art_url IS NULL AND source != 'fusersoundlab'"
+        "SELECT COUNT(*) FROM songs WHERE album_art_id IS NULL AND source != 'fusersoundlab'"
     ).fetchone()[0]
