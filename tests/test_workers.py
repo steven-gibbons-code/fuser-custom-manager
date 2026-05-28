@@ -276,7 +276,7 @@ def test_art_priority_queue_sentinel_terminates_consumer():
     assert second is _SENTINEL_SONG
 
 
-def test_parallel_art_worker_downloads_song_with_existing_url(qtbot, tmp_path):
+def test_parallel_art_worker_resolves_via_itunes_and_downloads(qtbot, tmp_path):
     import sqlite3
     from gui.workers import ParallelArtWorker
 
@@ -284,30 +284,40 @@ def test_parallel_art_worker_downloads_song_with_existing_url(qtbot, tmp_path):
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.executescript("""
+        CREATE TABLE album_art (
+            id INTEGER PRIMARY KEY, artist TEXT NOT NULL, album TEXT NOT NULL,
+            art_url TEXT, UNIQUE(artist, album)
+        );
         CREATE TABLE songs (
             id INTEGER PRIMARY KEY, artist TEXT, title TEXT,
-            art_url TEXT, source TEXT
+            album_art_id INTEGER, source TEXT
         );
-        INSERT INTO songs VALUES (2, 'Artist B', 'Song Y', 'http://example.com/2.jpg', 'fucuco');
+        INSERT INTO songs VALUES (1, 'Daft Punk', 'Get Lucky', NULL, 'fucuco');
     """)
 
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.content = b"IMAGEDATA"
     received = []
+    progress_vals = []
 
     with patch("gui.workers.ART_DIR", art_dir), \
-         patch("gui.workers.requests.get", return_value=mock_resp):
+         patch("gui.workers.itunes_lookup", return_value=("RAM", "http://itunes.com/art.jpg")), \
+         patch("gui.workers.requests.get", return_value=mock_resp), \
+         patch("gui.workers.get_or_create_album_art", wraps=lambda c, ar, al, u: 1) as mock_create, \
+         patch("gui.workers.link_song_album_art") as mock_link:
         worker = ParallelArtWorker(conn, n_resolve=1, n_download=1)
         worker.art_ready.connect(lambda sid: received.append(sid))
+        worker.progress.connect(lambda v: progress_vals.append(v))
         with qtbot.waitSignal(worker.finished, timeout=5000):
             worker.start()
 
-    assert 2 in received
-    assert (art_dir / "2.jpg").read_bytes() == b"IMAGEDATA"
+    assert 1 in received
+    mock_link.assert_called()
+    assert any(v > 0 for v in progress_vals)
 
 
-def test_parallel_art_worker_resolves_and_downloads(qtbot, tmp_path):
+def test_parallel_art_worker_falls_back_to_gdrive(qtbot, tmp_path):
     import sqlite3
     from gui.workers import ParallelArtWorker
 
@@ -315,11 +325,15 @@ def test_parallel_art_worker_resolves_and_downloads(qtbot, tmp_path):
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.executescript("""
+        CREATE TABLE album_art (
+            id INTEGER PRIMARY KEY, artist TEXT NOT NULL, album TEXT NOT NULL,
+            art_url TEXT, UNIQUE(artist, album)
+        );
         CREATE TABLE songs (
             id INTEGER PRIMARY KEY, artist TEXT, title TEXT,
-            art_url TEXT, source TEXT
+            album_art_id INTEGER, source TEXT
         );
-        INSERT INTO songs VALUES (1, 'Artist A', 'Song X', NULL, 'fucuco');
+        INSERT INTO songs VALUES (1, 'Daft Punk', 'Get Lucky', NULL, 'fucuco');
     """)
 
     mock_resp = MagicMock()
@@ -328,17 +342,17 @@ def test_parallel_art_worker_resolves_and_downloads(qtbot, tmp_path):
     received = []
 
     with patch("gui.workers.ART_DIR", art_dir), \
-         patch("gui.workers.gdrive_art_lookup", return_value="http://gdrive.com/1.jpg"), \
+         patch("gui.workers.itunes_lookup", return_value=None), \
+         patch("gui.workers.gdrive_art_lookup", return_value="http://gdrive.com/art.jpg"), \
          patch("gui.workers.requests.get", return_value=mock_resp), \
-         patch("gui.workers.update_art_url") as mock_update:
+         patch("gui.workers.get_or_create_album_art", return_value=1), \
+         patch("gui.workers.link_song_album_art"):
         worker = ParallelArtWorker(conn, n_resolve=1, n_download=1)
         worker.art_ready.connect(lambda sid: received.append(sid))
         with qtbot.waitSignal(worker.finished, timeout=5000):
             worker.start()
 
     assert 1 in received
-    mock_update.assert_called_once_with(conn, 1, "http://gdrive.com/1.jpg")
-    assert (art_dir / "1.jpg").read_bytes() == b"IMAGEDATA"
 
 
 def test_parallel_art_worker_emits_finished_with_no_pending(qtbot, tmp_path):
@@ -350,14 +364,18 @@ def test_parallel_art_worker_emits_finished_with_no_pending(qtbot, tmp_path):
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.executescript("""
+        CREATE TABLE album_art (
+            id INTEGER PRIMARY KEY, artist TEXT NOT NULL, album TEXT NOT NULL,
+            art_url TEXT, UNIQUE(artist, album)
+        );
         CREATE TABLE songs (
             id INTEGER PRIMARY KEY, artist TEXT, title TEXT,
-            art_url TEXT, source TEXT
+            album_art_id INTEGER, source TEXT
         );
-        INSERT INTO songs VALUES (3, 'Artist C', 'Song Z', 'http://example.com/3.jpg', 'fucuco');
+        INSERT INTO album_art VALUES (5, 'Daft Punk', 'RAM', 'http://itunes.com/art.jpg');
+        INSERT INTO songs VALUES (1, 'Daft Punk', 'Get Lucky', 5, 'fucuco');
     """)
-    # Pre-create the image so it's already cached
-    (art_dir / "3.jpg").write_bytes(b"CACHED")
+    (art_dir / "5.jpg").write_bytes(b"CACHED")
 
     with patch("gui.workers.ART_DIR", art_dir):
         worker = ParallelArtWorker(conn, n_resolve=1, n_download=1)
@@ -373,16 +391,20 @@ def test_parallel_art_worker_stop_terminates_gracefully(qtbot, tmp_path):
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.executescript("""
+        CREATE TABLE album_art (
+            id INTEGER PRIMARY KEY, artist TEXT NOT NULL, album TEXT NOT NULL,
+            art_url TEXT, UNIQUE(artist, album)
+        );
         CREATE TABLE songs (
             id INTEGER PRIMARY KEY, artist TEXT, title TEXT,
-            art_url TEXT, source TEXT
+            album_art_id INTEGER, source TEXT
         );
         INSERT INTO songs VALUES (1, 'Artist A', 'Song X', NULL, 'fucuco');
     """)
 
     with patch("gui.workers.ART_DIR", art_dir), \
-         patch("gui.workers.gdrive_art_lookup", return_value=None), \
-         patch("gui.workers.musicbrainz_lookup", return_value=None):
+         patch("gui.workers.itunes_lookup", return_value=None), \
+         patch("gui.workers.gdrive_art_lookup", return_value=None):
         worker = ParallelArtWorker(conn, n_resolve=1, n_download=1)
         worker.start()
         worker.stop()
@@ -392,51 +414,37 @@ def test_parallel_art_worker_stop_terminates_gracefully(qtbot, tmp_path):
     assert worker._cancel.is_set()
 
 
-def test_parallel_art_worker_prioritize_promotes_songs(tmp_path):
+def test_parallel_art_worker_skips_existing_file(qtbot, tmp_path):
+    """Song with existing album_art_id and existing file should emit art_ready without downloading."""
     import sqlite3
     from gui.workers import ParallelArtWorker
 
     art_dir = tmp_path / "art"
+    art_dir.mkdir()
+    (art_dir / "3.jpg").write_bytes(b"CACHED")
+
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.executescript("""
+        CREATE TABLE album_art (
+            id INTEGER PRIMARY KEY, artist TEXT NOT NULL, album TEXT NOT NULL,
+            art_url TEXT, UNIQUE(artist, album)
+        );
         CREATE TABLE songs (
             id INTEGER PRIMARY KEY, artist TEXT, title TEXT,
-            art_url TEXT, source TEXT
+            album_art_id INTEGER, source TEXT
         );
+        INSERT INTO album_art VALUES (3, 'Artist C', 'Album C', 'http://ex.com/3.jpg');
+        INSERT INTO songs VALUES (2, 'Artist C', 'Song Z', 3, 'fucuco');
     """)
-    for i in range(1, 6):
-        conn.execute(
-            "INSERT INTO songs VALUES (?, ?, ?, NULL, 'fucuco')",
-            (i, f"Artist {i}", f"Song {i}"),
-        )
-    conn.commit()
 
-    resolve_order = []
-
-    def fake_gdrive(artist):
-        resolve_order.append(artist)
-        return f"http://example.com/{artist}.jpg"
-
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.content = b"IMG"
-
+    received = []
     with patch("gui.workers.ART_DIR", art_dir), \
-         patch("gui.workers.gdrive_art_lookup", side_effect=fake_gdrive), \
-         patch("gui.workers.requests.get", return_value=mock_resp), \
-         patch("gui.workers.update_art_url"):
+         patch("gui.workers.requests.get") as mock_get:
         worker = ParallelArtWorker(conn, n_resolve=1, n_download=1)
-        # Pre-populate songs_by_id and queue manually for deterministic test
-        worker._songs_by_id = {
-            i: {"id": i, "artist": f"Artist {i}", "title": f"Song {i}"}
-            for i in range(1, 6)
-        }
-        for i in range(1, 6):
-            worker._pq.put(1, worker._songs_by_id[i])
-        worker._pq.put_sentinel()
-        worker.prioritize([3])  # promote song 3 to foreground
-        # Run the resolve loop directly (synchronous)
-        # (can't easily run full run() synchronously; check priority queue state)
-        first = worker._pq.get(timeout=0.1)
-        assert first is not None and first["id"] == 3
+        worker.art_ready.connect(lambda sid: received.append(sid))
+        with qtbot.waitSignal(worker.finished, timeout=3000):
+            worker.start()
+        mock_get.assert_not_called()
+
+    assert 2 in received

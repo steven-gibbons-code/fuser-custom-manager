@@ -5,12 +5,12 @@ import requests
 import queue
 import threading
 
-from db import upsert_songs, ART_DIR, update_art_url
+from db import upsert_songs, ART_DIR, get_or_create_album_art, link_song_album_art
 from downloader import download
 from installer import install_pairs
 from sources.fucuco import fetch_all as fetch_fucuco
 from sources.fusersoundlab import fetch_all as fetch_fsl
-from sources.art_resolver import bulk_resolve, musicbrainz_lookup
+from sources.art_resolver import bulk_resolve, itunes_lookup
 from sources.gdrive_art_index import lookup as gdrive_art_lookup
 
 
@@ -76,13 +76,14 @@ class ArtPriorityQueue:
 class ParallelArtWorker(QThread):
     """Concurrent art resolve + download worker with visible-window prioritization.
 
-    Resolve pool (GDrive-first, MB fallback) feeds a download pool.
+    Resolve pool (iTunes-first, GDrive fallback) feeds a download pool.
     Call prioritize() with visible song IDs at any time to process those first.
     """
 
     art_ready = Signal(int)
     finished = Signal()
     status = Signal(str)
+    progress = Signal(float)
 
     def __init__(self, conn, n_resolve: int = 5, n_download: int = 10, parent=None):
         super().__init__(parent)
@@ -97,9 +98,6 @@ class ParallelArtWorker(QThread):
 
     @Slot(list)
     def prioritize(self, song_ids: list) -> None:
-        # _songs_by_id is written once in run() before the thread pool starts.
-        # Calls from the main thread after start() see either an empty dict or
-        # a fully-populated one; CPython's GIL makes partial reads safe.
         self._pq.promote(song_ids, self._songs_by_id)
 
     def stop(self) -> None:
@@ -112,22 +110,25 @@ class ParallelArtWorker(QThread):
 
         rows = self._conn.execute(
             "SELECT id, artist, title FROM songs "
-            "WHERE art_url IS NULL AND source != 'fusersoundlab'"
+            "WHERE album_art_id IS NULL AND source != 'fusersoundlab'"
         ).fetchall()
         pending_resolve = [dict(r) for r in rows]
 
         rows2 = self._conn.execute(
-            "SELECT id, art_url FROM songs WHERE art_url IS NOT NULL"
+            "SELECT s.id, s.album_art_id, a.art_url FROM songs s "
+            "JOIN album_art a ON a.id = s.album_art_id "
+            "WHERE s.album_art_id IS NOT NULL"
         ).fetchall()
         pending_download = [
-            {"id": r["id"], "art_url": r["art_url"]}
+            {"id": r["id"], "album_art_id": r["album_art_id"], "art_url": r["art_url"]}
             for r in rows2
-            if not (ART_DIR / f"{r['id']}.jpg").exists()
         ]
 
         if not pending_resolve and not pending_download:
             self.finished.emit()
             return
+
+        total = len(pending_resolve) + len(pending_download)
 
         for s in pending_resolve:
             self._songs_by_id[s["id"]] = s
@@ -138,7 +139,7 @@ class ParallelArtWorker(QThread):
             self._pq.put_sentinel()
 
         for s in pending_download:
-            self._dl_q.put((s["id"], s["art_url"]))
+            self._dl_q.put((s["id"], s["album_art_id"], s["art_url"]))
 
         result_q: queue.Queue = queue.Queue()
         completed = [0]
@@ -159,13 +160,24 @@ class ParallelArtWorker(QThread):
                     break
                 if not pq.claim(song["id"]):
                     continue
-                url = gdrive_art_lookup(song["artist"])
-                if not url:
-                    url = musicbrainz_lookup(song["artist"], song["title"])
-                if url:
-                    with write_lock:
-                        update_art_url(conn, song["id"], url)
-                    dl_q.put((song["id"], url))
+                itunes_result = itunes_lookup(song["artist"], song["title"])
+                if itunes_result:
+                    album_name, art_url = itunes_result
+                else:
+                    gdrive_url = gdrive_art_lookup(song["artist"])
+                    if gdrive_url:
+                        album_name, art_url = "__artist__", gdrive_url
+                    else:
+                        result_q.put(song["id"])
+                        continue
+                with write_lock:
+                    album_art_id = get_or_create_album_art(conn, song["artist"], album_name, art_url)
+                    link_song_album_art(conn, song["id"], album_art_id)
+                dest = ART_DIR / f"{album_art_id}.jpg"
+                if dest.exists():
+                    result_q.put(song["id"])
+                else:
+                    dl_q.put((song["id"], album_art_id, art_url))
 
         def download_loop() -> None:
             while not cancel.is_set():
@@ -175,15 +187,13 @@ class ParallelArtWorker(QThread):
                     continue
                 if item is None:
                     break
-                song_id, url = item
-                dest = ART_DIR / f"{song_id}.jpg"
+                song_id, album_art_id, url = item
+                dest = ART_DIR / f"{album_art_id}.jpg"
                 if dest.exists():
                     result_q.put(song_id)
                     continue
                 try:
-                    resp = requests.get(
-                        url, timeout=15, headers={"User-Agent": "Mozilla/5.0"}
-                    )
+                    resp = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
                     if resp.status_code == 200:
                         dest.write_bytes(resp.content)
                         result_q.put(song_id)
@@ -201,7 +211,9 @@ class ParallelArtWorker(QThread):
                     song_id = result_q.get(timeout=0.1)
                     completed[0] += 1
                     self.art_ready.emit(song_id)
-                    self.status.emit(f"Fetching art… ({completed[0]})")
+                    progress_val = min(completed[0] / total, 1.0) if total else 1.0
+                    self.progress.emit(progress_val)
+                    self.status.emit(f"Fetching art… ({completed[0]}/{total})")
                 except queue.Empty:
                     pass
 
