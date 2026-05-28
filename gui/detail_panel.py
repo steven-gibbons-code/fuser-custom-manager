@@ -64,7 +64,7 @@ class DetailPanel(QScrollArea):
         self._art_lbl = QLabel()
         self._art_lbl.setFixedSize(160, 160)
         self._art_lbl.setStyleSheet("border-radius: 14px; background: transparent;")
-        self._art_lbl.setPixmap(_art_pixmap(0, size=160))
+        self._art_lbl.setPixmap(_art_pixmap({}, size=160))
         layout.addWidget(self._art_lbl)
 
         self._art_overlay_btn = QPushButton("↓", self._art_lbl)
@@ -261,7 +261,7 @@ class DetailPanel(QScrollArea):
         self._song = song
         self._manual_lbl.setText("")
 
-        self._art_lbl.setPixmap(_art_pixmap(song.get("id", 0), size=160))
+        self._art_lbl.setPixmap(_art_pixmap(song, size=160))
         self._title_lbl.setText(song.get("title", "—"))
         self._artist_lbl.setText(song.get("artist", "—"))
 
@@ -304,7 +304,7 @@ class DetailPanel(QScrollArea):
 
     def clear(self):
         self._song = None
-        self._art_lbl.setPixmap(_art_pixmap(0, size=160))
+        self._art_lbl.setPixmap(_art_pixmap({}, size=160))
         self._title_lbl.setText("—")
         self._artist_lbl.setText("—")
         self._quality_pill.setText("—")
