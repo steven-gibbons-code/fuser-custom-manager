@@ -100,6 +100,7 @@ class ParallelArtWorker(QThread):
         self._pq.promote(song_ids, self._songs_by_id)
 
     def stop(self) -> None:
+        # In-flight network calls (up to 15s) must complete before the thread exits.
         self._cancel.set()
 
     def run(self) -> None:
