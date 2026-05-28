@@ -225,3 +225,52 @@ def test_single_art_worker_emits_error_on_failure(tmp_path):
         worker.run()
 
     assert errors and "network error" in errors[0]
+
+
+def test_art_priority_queue_foreground_before_background():
+    from gui.workers import ArtPriorityQueue
+    pq = ArtPriorityQueue()
+    song_a = {"id": 1, "artist": "A", "title": "X"}
+    song_b = {"id": 2, "artist": "B", "title": "Y"}
+    pq.put(1, song_a)
+    pq.put(1, song_b)
+    # Promote song 2 to foreground
+    pq.promote([2], {1: song_a, 2: song_b})
+    first = pq.get(timeout=0.1)
+    assert first is not None and first["id"] == 2
+
+
+def test_art_priority_queue_claim_prevents_double_processing():
+    from gui.workers import ArtPriorityQueue
+    pq = ArtPriorityQueue()
+    song = {"id": 5, "artist": "A", "title": "X"}
+    pq.put(1, song)
+    pq.promote([5], {5: song})  # adds duplicate at priority 0
+    first = pq.get(timeout=0.1)
+    assert first is not None
+    assert pq.claim(first["id"]) is True  # first claim succeeds
+    second = pq.get(timeout=0.1)
+    assert second is not None
+    assert pq.claim(second["id"]) is False  # duplicate rejected
+
+
+def test_art_priority_queue_promote_skips_claimed():
+    from gui.workers import ArtPriorityQueue
+    pq = ArtPriorityQueue()
+    song = {"id": 7, "artist": "A", "title": "X"}
+    assert pq.claim(7) is True  # pre-claim (already processing)
+    pq.promote([7], {7: song})  # should not add since already claimed
+    result = pq.get(timeout=0.1)
+    assert result is None  # nothing was added
+
+
+def test_art_priority_queue_sentinel_terminates_consumer():
+    from gui.workers import ArtPriorityQueue, _SENTINEL_SONG
+    pq = ArtPriorityQueue()
+    song = {"id": 10, "artist": "A", "title": "X"}
+    pq.put(1, song)
+    pq.put_sentinel()
+    first = pq.get(timeout=0.1)
+    assert first is not None and first["id"] == 10
+    second = pq.get(timeout=0.1)
+    assert second is _SENTINEL_SONG

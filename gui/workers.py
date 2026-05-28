@@ -1,6 +1,8 @@
 from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 import requests
+import queue
+import threading
 
 from db import upsert_songs, ART_DIR, update_art_url
 from downloader import download
@@ -9,6 +11,65 @@ from sources.fucuco import fetch_all as fetch_fucuco
 from sources.fusersoundlab import fetch_all as fetch_fsl
 from sources.art_resolver import bulk_resolve, musicbrainz_lookup
 from sources.gdrive_art_index import lookup as gdrive_art_lookup
+
+
+_SENTINEL_SONG: dict = {"id": -1, "_sentinel": True}
+
+
+class ArtPriorityQueue:
+    """Thread-safe priority queue for art resolution tasks.
+
+    Priority 0 = foreground (visible rows), 1 = background, 999 = sentinel.
+    Use claim() instead of a separate is_done check — it atomically marks
+    and returns whether this thread won the race.
+    """
+
+    def __init__(self) -> None:
+        self._q: queue.PriorityQueue = queue.PriorityQueue()
+        self._claimed: set[int] = set()
+        self._lock = threading.Lock()
+        self._counter = 0
+
+    def put(self, priority: int, song: dict) -> None:
+        with self._lock:
+            if song["id"] not in self._claimed:
+                self._counter += 1
+                self._q.put((priority, self._counter, song))
+
+    def put_sentinel(self) -> None:
+        """Enqueue a sentinel that terminates one consumer when dequeued."""
+        with self._lock:
+            self._counter += 1
+            self._q.put((999, self._counter, _SENTINEL_SONG))
+
+    def promote(self, song_ids: list[int], songs_by_id: dict) -> None:
+        """Re-enqueue listed songs at priority 0. Skips already-claimed songs."""
+        with self._lock:
+            for sid in song_ids:
+                if sid not in self._claimed:
+                    song = songs_by_id.get(sid)
+                    if song:
+                        self._counter += 1
+                        self._q.put((0, self._counter, song))
+
+    def claim(self, song_id: int) -> bool:
+        """Atomically mark song as claimed. Returns True if this call won the race."""
+        with self._lock:
+            if song_id in self._claimed:
+                return False
+            self._claimed.add(song_id)
+            return True
+
+    def get(self, timeout: float = 0.5) -> dict | None:
+        """Return next song dict (may be _SENTINEL_SONG), or None on timeout."""
+        try:
+            _, _, item = self._q.get(timeout=timeout)
+            return item
+        except queue.Empty:
+            return None
+
+    def empty(self) -> bool:
+        return self._q.empty()
 
 
 class RefreshWorker(QThread):
