@@ -3,74 +3,85 @@ import sqlite3
 import threading
 import requests
 
-from db import update_art_url
+from db import (
+    get_songs_pending_art,
+    get_or_create_album_art, link_song_album_art, ART_DIR as _DEFAULT_ART_DIR,
+)
 from sources.gdrive_art_index import lookup as gdrive_art_lookup
 
-_MB_URL = "https://musicbrainz.org/ws/2/release"
-_CAA_URL = "https://coverartarchive.org/release/{mbid}/front-250"
+_ITUNES_URL = "https://itunes.apple.com/search"
 _USER_AGENT = "FuserCustomTool/1.0 (sgibb.code@gmail.com)"
 
-_mb_lock = threading.Lock()
-_mb_last_call = 0.0
+_ITUNES_LOCK = threading.Lock()
+_ITUNES_LAST_CALL = 0.0
 
 
-def _mb_throttle() -> None:
-    """Enforce 1 req/sec globally across all threads for MusicBrainz API calls.
-
-    The lock is held during sleep so threads queue in strict single-file order.
-    """
-    global _mb_last_call
-    with _mb_lock:
+def _itunes_throttle() -> None:
+    """Enforce ~3 req/sec globally across all threads for iTunes API calls."""
+    global _ITUNES_LAST_CALL
+    with _ITUNES_LOCK:
         now = time.time()
-        wait = 1.0 - (now - _mb_last_call)
+        wait = 0.35 - (now - _ITUNES_LAST_CALL)
         if wait > 0:
             time.sleep(wait)
-        _mb_last_call = time.time()
+        _ITUNES_LAST_CALL = time.time()
 
 
-def musicbrainz_lookup(artist: str, title: str) -> str | None:
-    """Return a Cover Art Archive image URL for the given artist+title, or None."""
+def itunes_lookup(artist: str, title: str) -> tuple[str, str] | None:
+    """Return (album_name, artwork_url) for the given artist+title, or None."""
     try:
-        _mb_throttle()
+        _itunes_throttle()
         resp = requests.get(
-            _MB_URL,
-            params={"query": f'artist:"{artist}" recording:"{title}"', "fmt": "json", "limit": 5},
+            _ITUNES_URL,
+            params={"term": f"{artist} {title}", "entity": "song", "limit": 5},
             headers={"User-Agent": _USER_AGENT},
             timeout=10,
         )
         if resp.status_code != 200:
             return None
-        releases = resp.json().get("releases", [])
-        if not releases:
+        results = resp.json().get("results", [])
+        if not results:
             return None
-        mbid = releases[0]["id"]
-
-        _mb_throttle()
-        caa_resp = requests.get(
-            _CAA_URL.format(mbid=mbid),
-            headers={"User-Agent": _USER_AGENT},
-            timeout=10,
-            allow_redirects=True,
-        )
-        if caa_resp.status_code == 200:
-            return caa_resp.url
-        return None
+        track = results[0]
+        album = track.get("collectionName", "")
+        artwork = track.get("artworkUrl100", "")
+        if not album or not artwork:
+            return None
+        artwork = artwork.replace("100x100bb", "600x600bb")
+        return album, artwork
     except Exception:
         return None
 
 
-def bulk_resolve(conn: sqlite3.Connection, progress_cb=None) -> None:
-    """Look up art URLs for all songs where art_url IS NULL and source is not fusersoundlab."""
-    rows = conn.execute(
-        "SELECT id, source, artist, title FROM songs WHERE art_url IS NULL"
-    ).fetchall()
-    pending = [r for r in rows if r["source"] != "fusersoundlab"]
+def bulk_resolve(conn: sqlite3.Connection, progress_cb=None, art_dir=None) -> None:
+    """Look up art for all pending songs (album_art_id IS NULL, non-fusersoundlab)."""
+    if art_dir is None:
+        art_dir = _DEFAULT_ART_DIR
+    art_dir.mkdir(parents=True, exist_ok=True)
+
+    pending = get_songs_pending_art(conn)
     total = len(pending)
     for i, row in enumerate(pending):
         if progress_cb:
             progress_cb(f"Resolving art… ({i + 1}/{total})")
-        url = musicbrainz_lookup(row["artist"], row["title"])
-        if not url:
-            url = gdrive_art_lookup(row["artist"], status_cb=progress_cb)
-        if url:
-            update_art_url(conn, row["id"], url)
+
+        itunes_result = itunes_lookup(row["artist"], row["title"])
+        if itunes_result:
+            album_name, art_url = itunes_result
+        else:
+            gdrive_url = gdrive_art_lookup(row["artist"], status_cb=progress_cb)
+            if gdrive_url:
+                album_name, art_url = "__artist__", gdrive_url
+            else:
+                continue
+
+        album_art_id = get_or_create_album_art(conn, row["artist"], album_name, art_url)
+        dest = art_dir / f"{album_art_id}.jpg"
+        if not dest.exists():
+            try:
+                resp = requests.get(art_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+                if resp.status_code == 200:
+                    dest.write_bytes(resp.content)
+            except Exception:
+                pass
+        link_song_album_art(conn, row["id"], album_art_id)

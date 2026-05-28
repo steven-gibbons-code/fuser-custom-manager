@@ -269,8 +269,11 @@ class FuserApp(QMainWindow):
 
     def _start_art_resolve(self):
         self._set_action_buttons_enabled(False)
+        pending = count_pending_art(self.conn)
+        self.status_bar.start_art_resolve(pending)
         worker = ParallelArtWorker(self.conn)
         worker.status.connect(self.status_bar.set_message)
+        worker.progress.connect(self.status_bar.set_progress)
         worker.art_ready.connect(self._on_art_ready)
         worker.finished.connect(self.status_bar.set_idle)
         worker.finished.connect(lambda: self._set_action_buttons_enabled(True))

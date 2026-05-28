@@ -51,19 +51,20 @@ def _rgba(token_str: str) -> QColor:
     return QColor(int(r), int(g), int(b), int(float(a) * 255))
 
 
-def _art_pixmap(song_id: int, size: int = ART_SIZE) -> QPixmap:
-    """Return a cached pixmap for song_id: real art from disk, or gradient fallback."""
+def _art_pixmap(song: dict, size: int = ART_SIZE) -> QPixmap:
+    """Return a cached pixmap for song: real art from disk, or gradient fallback."""
+    song_id = song.get("id", 0)
+    album_art_id = song.get("album_art_id")
     key = f"art_{song_id}_{size}"
     pm = QPixmap()
     if QPixmapCache.find(key, pm):
         return pm
 
-    # Check disk cache for downloaded art
-    art_file = ART_DIR / f"{song_id}.jpg"
-    if art_file.exists():
+    # Check disk cache for downloaded art (keyed by album_art_id)
+    art_file = ART_DIR / f"{album_art_id}.jpg" if album_art_id is not None else None
+    if art_file and art_file.exists():
         source = QPixmap(str(art_file))
         if not source.isNull():
-            # Scale to fill, then crop to exact square
             scaled = source.scaled(
                 size, size,
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
@@ -73,7 +74,6 @@ def _art_pixmap(song_id: int, size: int = ART_SIZE) -> QPixmap:
             y = (scaled.height() - size) // 2
             cropped = scaled.copy(x, y, size, size)
 
-            # Apply rounded corners via clip path
             rounded = QPixmap(size, size)
             rounded.fill(Qt.GlobalColor.transparent)
             p = QPainter(rounded)
@@ -86,7 +86,7 @@ def _art_pixmap(song_id: int, size: int = ART_SIZE) -> QPixmap:
             QPixmapCache.insert(key, rounded)
             return rounded
 
-    # Generate gradient placeholder
+    # Gradient placeholder (keyed by song_id for variety)
     pm = QPixmap(size, size)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
@@ -167,7 +167,7 @@ class SongRowDelegate(QStyledItemDelegate):
         # ── Album art ───────────────────────────────────────────
         art_x = int(card.left() + 36)
         art_y = int(card.center().y() - ART_SIZE / 2)
-        p.drawPixmap(art_x, art_y, _art_pixmap(song.get("id", 0)))
+        p.drawPixmap(art_x, art_y, _art_pixmap(song))
 
         # ── Text ────────────────────────────────────────────────
         text_x    = art_x + ART_SIZE + 14
