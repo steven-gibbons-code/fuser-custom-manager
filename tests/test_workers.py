@@ -281,7 +281,7 @@ def test_parallel_art_worker_downloads_song_with_existing_url(qtbot, tmp_path):
     from gui.workers import ParallelArtWorker
 
     art_dir = tmp_path / "art"
-    conn = sqlite3.connect(":memory:")
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.executescript("""
         CREATE TABLE songs (
@@ -312,7 +312,7 @@ def test_parallel_art_worker_resolves_and_downloads(qtbot, tmp_path):
     from gui.workers import ParallelArtWorker
 
     art_dir = tmp_path / "art"
-    conn = sqlite3.connect(":memory:")
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.executescript("""
         CREATE TABLE songs (
@@ -347,7 +347,7 @@ def test_parallel_art_worker_emits_finished_with_no_pending(qtbot, tmp_path):
 
     art_dir = tmp_path / "art"
     art_dir.mkdir()
-    conn = sqlite3.connect(":memory:")
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.executescript("""
         CREATE TABLE songs (
@@ -370,7 +370,7 @@ def test_parallel_art_worker_prioritize_promotes_songs(tmp_path):
     from gui.workers import ParallelArtWorker
 
     art_dir = tmp_path / "art"
-    conn = sqlite3.connect(":memory:")
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.executescript("""
         CREATE TABLE songs (

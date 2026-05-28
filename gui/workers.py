@@ -94,16 +94,6 @@ class ParallelArtWorker(QThread):
         self._dl_q: queue.Queue = queue.Queue()
         self._songs_by_id: dict[int, dict] = {}
         self._write_lock = threading.Lock()
-        # Pre-fetch DB rows in the calling thread to avoid SQLite thread restrictions
-        rows = conn.execute(
-            "SELECT id, artist, title FROM songs "
-            "WHERE art_url IS NULL AND source != 'fusersoundlab'"
-        ).fetchall()
-        self._pending_resolve = [dict(r) for r in rows]
-        rows2 = conn.execute(
-            "SELECT id, art_url FROM songs WHERE art_url IS NOT NULL"
-        ).fetchall()
-        self._pending_download_rows = [{"id": r["id"], "art_url": r["art_url"]} for r in rows2]
 
     @Slot(list)
     def prioritize(self, song_ids: list) -> None:
@@ -115,10 +105,19 @@ class ParallelArtWorker(QThread):
     def run(self) -> None:
         ART_DIR.mkdir(parents=True, exist_ok=True)
 
-        pending_resolve = self._pending_resolve
+        rows = self._conn.execute(
+            "SELECT id, artist, title FROM songs "
+            "WHERE art_url IS NULL AND source != 'fusersoundlab'"
+        ).fetchall()
+        pending_resolve = [dict(r) for r in rows]
+
+        rows2 = self._conn.execute(
+            "SELECT id, art_url FROM songs WHERE art_url IS NOT NULL"
+        ).fetchall()
         pending_download = [
-            s for s in self._pending_download_rows
-            if not (ART_DIR / f"{s['id']}.jpg").exists()
+            {"id": r["id"], "art_url": r["art_url"]}
+            for r in rows2
+            if not (ART_DIR / f"{r['id']}.jpg").exists()
         ]
 
         total = len(pending_resolve) + len(pending_download)
