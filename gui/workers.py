@@ -1,5 +1,6 @@
 from pathlib import Path
-from PySide6.QtCore import QThread, Signal
+from concurrent.futures import ThreadPoolExecutor
+from PySide6.QtCore import QThread, Signal, Slot
 import requests
 import queue
 import threading
@@ -70,6 +71,151 @@ class ArtPriorityQueue:
 
     def empty(self) -> bool:
         return self._q.empty()
+
+
+class ParallelArtWorker(QThread):
+    """Concurrent art resolve + download worker with visible-window prioritization.
+
+    Resolve pool (GDrive-first, MB fallback) feeds a download pool.
+    Call prioritize() with visible song IDs at any time to process those first.
+    """
+
+    art_ready = Signal(int)
+    finished = Signal()
+    status = Signal(str)
+
+    def __init__(self, conn, n_resolve: int = 5, n_download: int = 10, parent=None):
+        super().__init__(parent)
+        self._conn = conn
+        self._n_resolve = n_resolve
+        self._n_download = n_download
+        self._cancel = threading.Event()
+        self._pq = ArtPriorityQueue()
+        self._dl_q: queue.Queue = queue.Queue()
+        self._songs_by_id: dict[int, dict] = {}
+        self._write_lock = threading.Lock()
+        # Pre-fetch DB rows in the calling thread to avoid SQLite thread restrictions
+        rows = conn.execute(
+            "SELECT id, artist, title FROM songs "
+            "WHERE art_url IS NULL AND source != 'fusersoundlab'"
+        ).fetchall()
+        self._pending_resolve = [dict(r) for r in rows]
+        rows2 = conn.execute(
+            "SELECT id, art_url FROM songs WHERE art_url IS NOT NULL"
+        ).fetchall()
+        self._pending_download_rows = [{"id": r["id"], "art_url": r["art_url"]} for r in rows2]
+
+    @Slot(list)
+    def prioritize(self, song_ids: list) -> None:
+        self._pq.promote(song_ids, self._songs_by_id)
+
+    def stop(self) -> None:
+        self._cancel.set()
+
+    def run(self) -> None:
+        ART_DIR.mkdir(parents=True, exist_ok=True)
+
+        pending_resolve = self._pending_resolve
+        pending_download = [
+            s for s in self._pending_download_rows
+            if not (ART_DIR / f"{s['id']}.jpg").exists()
+        ]
+
+        total = len(pending_resolve) + len(pending_download)
+        if total == 0:
+            self.finished.emit()
+            return
+
+        for s in pending_resolve:
+            self._songs_by_id[s["id"]] = s
+
+        for s in pending_resolve:
+            self._pq.put(1, s)
+        for _ in range(self._n_resolve):
+            self._pq.put_sentinel()
+
+        for s in pending_download:
+            self._dl_q.put((s["id"], s["art_url"]))
+
+        result_q: queue.Queue = queue.Queue()
+        completed = [0]
+        sentinels_sent = [False]
+
+        cancel = self._cancel
+        pq = self._pq
+        dl_q = self._dl_q
+        write_lock = self._write_lock
+        conn = self._conn
+
+        def resolve_loop() -> None:
+            while not cancel.is_set():
+                song = pq.get(timeout=0.5)
+                if song is None:
+                    continue
+                if song is _SENTINEL_SONG:
+                    break
+                if not pq.claim(song["id"]):
+                    continue
+                url = gdrive_art_lookup(song["artist"])
+                if not url:
+                    url = musicbrainz_lookup(song["artist"], song["title"])
+                if url:
+                    with write_lock:
+                        update_art_url(conn, song["id"], url)
+                    dl_q.put((song["id"], url))
+
+        def download_loop() -> None:
+            while not cancel.is_set():
+                try:
+                    item = dl_q.get(timeout=0.5)
+                except queue.Empty:
+                    continue
+                if item is None:
+                    break
+                song_id, url = item
+                dest = ART_DIR / f"{song_id}.jpg"
+                if dest.exists():
+                    result_q.put(song_id)
+                    continue
+                try:
+                    resp = requests.get(
+                        url, timeout=15, headers={"User-Agent": "Mozilla/5.0"}
+                    )
+                    if resp.status_code == 200:
+                        dest.write_bytes(resp.content)
+                        result_q.put(song_id)
+                except Exception:
+                    pass
+
+        with ThreadPoolExecutor(max_workers=self._n_resolve) as rpool, \
+             ThreadPoolExecutor(max_workers=self._n_download) as dpool:
+
+            resolve_futs = [rpool.submit(resolve_loop) for _ in range(self._n_resolve)]
+            download_futs = [dpool.submit(download_loop) for _ in range(self._n_download)]
+
+            while not self._cancel.is_set():
+                try:
+                    song_id = result_q.get(timeout=0.1)
+                    completed[0] += 1
+                    self.art_ready.emit(song_id)
+                    self.status.emit(f"Fetching art… ({completed[0]}/{total})")
+                except queue.Empty:
+                    pass
+
+                if not sentinels_sent[0] and all(f.done() for f in resolve_futs):
+                    for _ in range(self._n_download):
+                        self._dl_q.put(None)
+                    sentinels_sent[0] = True
+
+                if sentinels_sent[0] and all(f.done() for f in download_futs):
+                    break
+
+        while not result_q.empty():
+            song_id = result_q.get_nowait()
+            completed[0] += 1
+            self.art_ready.emit(song_id)
+
+        self.finished.emit()
 
 
 class RefreshWorker(QThread):
