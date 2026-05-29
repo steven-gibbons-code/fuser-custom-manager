@@ -4,7 +4,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from unittest.mock import patch, MagicMock
 from PySide6.QtWidgets import QApplication
-from gui.workers import RefreshWorker, DownloadWorker, BatchDownloadWorker, ArtFetchWorker, ArtResolveWorker, SingleArtWorker
+from gui.workers import RefreshWorker, DownloadWorker, BatchDownloadWorker, ArtFetchWorker, ArtResolveWorker, SingleArtWorker, ParallelArtWorker
 
 _app = QApplication.instance() or QApplication([])
 
@@ -503,11 +503,11 @@ def test_parallel_art_worker_handles_fusersoundlab_art_url(qtbot, tmp_path):
     mock_resp.content = b"FSLIMAGE"
     received = []
 
-    from db import get_or_create_album_art as _real_goca, link_song_album_art as _real_link
+    from db import get_or_create_album_art_by_url as _real_gocau, link_song_album_art as _real_link
     with patch("gui.workers.ART_DIR", art_dir), \
          patch("gui.workers.itunes_lookup") as mock_itunes, \
          patch("gui.workers.requests.get", return_value=mock_resp), \
-         patch("gui.workers.get_or_create_album_art", wraps=_real_goca) as mock_create, \
+         patch("gui.workers.get_or_create_album_art_by_url", wraps=_real_gocau) as mock_create, \
          patch("gui.workers.link_song_album_art", wraps=_real_link) as mock_link:
         worker = ParallelArtWorker(conn, n_resolve=1, n_download=1)
         worker.art_ready.connect(lambda sid: received.append(sid))
@@ -515,6 +515,7 @@ def test_parallel_art_worker_handles_fusersoundlab_art_url(qtbot, tmp_path):
             worker.start()
 
     mock_itunes.assert_not_called()
-    mock_create.assert_called_once_with(conn, "FSL Artist", "FSL Song", "http://fsl.com/poster.jpg")
+    # URL-keyed: called with art_url as the album identifier, not the song title
+    mock_create.assert_called_once_with(conn, "FSL Artist", "http://fsl.com/poster.jpg")
     assert mock_link.call_count >= 1
     assert 10 in received

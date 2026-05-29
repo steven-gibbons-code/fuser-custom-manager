@@ -276,6 +276,9 @@ class FuserApp(QMainWindow):
             self._set_action_buttons_enabled(True)
 
     def _start_art_resolve(self):
+        if self._art_worker is not None and self._art_worker.isRunning():
+            return  # already resolving — don't spawn a second worker
+
         self._set_action_buttons_enabled(False)
         self._fetch_art_btn.setEnabled(True)  # re-enable as stop button
         self._fetch_art_btn.setText("✕ Stop Fetch")
@@ -290,9 +293,6 @@ class FuserApp(QMainWindow):
         worker.art_ready.connect(self._on_art_ready)
         worker.finished.connect(self._on_art_resolve_done)
         self.song_table.visibleSongsChanged.connect(worker.prioritize)
-        worker.finished.connect(
-            lambda: self.song_table.visibleSongsChanged.disconnect(worker.prioritize)
-        )
         self._art_worker = worker
         worker.start()
         self.song_table.emit_visible_songs()
@@ -305,6 +305,12 @@ class FuserApp(QMainWindow):
         self.status_bar.set_message("Stopping art fetch…")
 
     def _on_art_resolve_done(self):
+        # Disconnect visibleSongsChanged before nulling the worker reference.
+        if self._art_worker is not None:
+            try:
+                self.song_table.visibleSongsChanged.disconnect(self._art_worker.prioritize)
+            except RuntimeError:
+                pass
         self._art_worker = None
         self._fetch_art_btn.setText("↓ Fetch Art")
         try:

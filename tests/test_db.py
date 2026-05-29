@@ -5,7 +5,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from db import (init_db, upsert_songs, get_songs, mark_installed,
                 mark_uninstalled, get_installed, get_setting, set_setting,
                 get_songs_with_art_url, update_art_url, count_pending_art, ART_DIR,
-                get_or_create_album_art, link_song_album_art, get_songs_pending_art)
+                get_or_create_album_art, get_or_create_album_art_by_url,
+                link_song_album_art, get_songs_pending_art)
 
 SONG = {
     "source": "fucuco_main", "artist": "Daft Punk", "title": "Get Lucky",
@@ -402,5 +403,100 @@ def test_migration_wipes_old_art_files(tmp_path):
         # After migration, old files should be gone
         assert not (old_art_dir / "1.jpg").exists()
         assert not (old_art_dir / "2.jpg").exists()
+    finally:
+        db_mod.ART_DIR = original_art_dir
+
+
+def test_get_or_create_album_art_by_url_reuses_existing_record(conn):
+    """Two songs with the same art_url should share one album_art record."""
+    id1 = get_or_create_album_art_by_url(conn, "Artist A", "http://example.com/album.jpg")
+    id2 = get_or_create_album_art_by_url(conn, "Artist A", "http://example.com/album.jpg")
+    assert id1 == id2
+    count = conn.execute("SELECT COUNT(*) FROM album_art WHERE art_url = ?",
+                         ("http://example.com/album.jpg",)).fetchone()[0]
+    assert count == 1
+
+
+def test_get_or_create_album_art_by_url_reuses_across_different_artists(conn):
+    """art_url lookup is URL-first — reuses even when artist differs."""
+    id1 = get_or_create_album_art_by_url(conn, "Artist A", "http://example.com/art.jpg")
+    id2 = get_or_create_album_art_by_url(conn, "Artist B", "http://example.com/art.jpg")
+    assert id1 == id2
+
+
+def test_dedup_album_art_by_url_merges_duplicates(tmp_path):
+    """_dedup_album_art_by_url merges records sharing an art_url and redirects songs."""
+    import db as db_mod
+    from db import _dedup_album_art_by_url
+
+    art_dir = tmp_path / "art"
+    art_dir.mkdir()
+    original_art_dir = db_mod.ART_DIR
+    db_mod.ART_DIR = art_dir
+    try:
+        conn = init_db(tmp_path / "test.db")
+        conn.executescript("""
+            INSERT INTO album_art (id, artist, album, art_url) VALUES
+                (10, 'The Killers', 'Mr. Brightside', 'http://ex.com/killers.jpg'),
+                (11, 'The Killers', 'Somebody Told Me', 'http://ex.com/killers.jpg');
+            INSERT INTO songs (id, source, artist, title, link, last_seen, album_art_id)
+            VALUES
+                (1, 'fucuco_main', 'The Killers', 'Mr. Brightside', 'http://a.com/1', '2026-01-01', 10),
+                (2, 'fucuco_main', 'The Killers', 'Somebody Told Me', 'http://a.com/2', '2026-01-01', 11);
+        """)
+        (art_dir / "10.jpg").write_bytes(b"ART")
+
+        _dedup_album_art_by_url(conn)
+
+        # Only one album_art record remains for this URL
+        count = conn.execute(
+            "SELECT COUNT(*) FROM album_art WHERE art_url = 'http://ex.com/killers.jpg'"
+        ).fetchone()[0]
+        assert count == 1
+
+        # Both songs point to the same (canonical) album_art_id
+        ids = [r[0] for r in conn.execute(
+            "SELECT album_art_id FROM songs ORDER BY id"
+        ).fetchall()]
+        assert ids[0] == ids[1]
+
+        # The file for the canonical id still exists; non-canonical file is gone
+        canonical_id = ids[0]
+        assert (art_dir / f"{canonical_id}.jpg").exists()
+        non_canonical_id = 11 if canonical_id == 10 else 10
+        assert not (art_dir / f"{non_canonical_id}.jpg").exists()
+    finally:
+        db_mod.ART_DIR = original_art_dir
+
+
+def test_dedup_prefers_record_with_existing_file(tmp_path):
+    """When merging, the record whose file already exists becomes canonical."""
+    import db as db_mod
+    from db import _dedup_album_art_by_url
+
+    art_dir = tmp_path / "art"
+    art_dir.mkdir()
+    original_art_dir = db_mod.ART_DIR
+    db_mod.ART_DIR = art_dir
+    try:
+        conn = init_db(tmp_path / "test.db")
+        conn.executescript("""
+            INSERT INTO album_art (id, artist, album, art_url) VALUES
+                (20, 'Nirvana', 'Smells Like Teen Spirit', 'http://ex.com/nv.jpg'),
+                (21, 'Nirvana', 'Come As You Are', 'http://ex.com/nv.jpg');
+            INSERT INTO songs (id, source, artist, title, link, last_seen, album_art_id)
+            VALUES
+                (3, 'fucuco_main', 'Nirvana', 'SLTS', 'http://a.com/3', '2026-01-01', 20),
+                (4, 'fucuco_main', 'Nirvana', 'CAYA', 'http://a.com/4', '2026-01-01', 21);
+        """)
+        # Only id=21 has a file — it should become canonical
+        (art_dir / "21.jpg").write_bytes(b"ART")
+
+        _dedup_album_art_by_url(conn)
+
+        canonical_id = conn.execute("SELECT album_art_id FROM songs WHERE id = 3").fetchone()[0]
+        assert canonical_id == 21
+        assert (art_dir / "21.jpg").exists()
+        assert not (art_dir / "20.jpg").exists()
     finally:
         db_mod.ART_DIR = original_art_dir

@@ -163,6 +163,70 @@ def _needs_migration(conn: sqlite3.Connection) -> bool:
     return "artist, title" in row[0].lower()
 
 
+def _dedup_album_art_by_url(conn: sqlite3.Connection) -> None:
+    """Merge album_art records that share the same art_url into a single canonical record.
+
+    Fixes duplicates created when song titles were mistakenly used as album keys.
+    Idempotent — groups with COUNT > 1 will be empty after the first run.
+    """
+    dup_urls = conn.execute(
+        "SELECT art_url FROM album_art WHERE art_url IS NOT NULL "
+        "GROUP BY art_url HAVING COUNT(*) > 1"
+    ).fetchall()
+
+    if not dup_urls:
+        return
+
+    for row in dup_urls:
+        art_url = row["art_url"]
+        ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM album_art WHERE art_url = ? ORDER BY id", (art_url,)
+        ).fetchall()]
+
+        # Prefer the record whose file already exists; fall back to lowest id.
+        canonical_id = ids[0]
+        for aid in ids:
+            if (ART_DIR / f"{aid}.jpg").exists():
+                canonical_id = aid
+                break
+
+        non_canonical = [i for i in ids if i != canonical_id]
+        if not non_canonical:
+            continue
+
+        # If canonical has no file but a non-canonical does, adopt that file.
+        canonical_file = ART_DIR / f"{canonical_id}.jpg"
+        if not canonical_file.exists():
+            for nc_id in non_canonical:
+                nc_file = ART_DIR / f"{nc_id}.jpg"
+                if nc_file.exists():
+                    try:
+                        nc_file.rename(canonical_file)
+                    except Exception:
+                        pass
+                    break
+
+        placeholders = ",".join("?" * len(non_canonical))
+        conn.execute(
+            f"UPDATE songs SET album_art_id = ? WHERE album_art_id IN ({placeholders})",
+            [canonical_id, *non_canonical],
+        )
+        conn.execute(
+            f"DELETE FROM album_art WHERE id IN ({placeholders})",
+            non_canonical,
+        )
+
+        # Remove any remaining non-canonical files.
+        for nc_id in non_canonical:
+            nc_file = ART_DIR / f"{nc_id}.jpg"
+            try:
+                nc_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    conn.commit()
+
+
 def init_db(path: Path = DB_PATH) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path), check_same_thread=False)
@@ -171,6 +235,7 @@ def init_db(path: Path = DB_PATH) -> sqlite3.Connection:
         conn.executescript("DROP TABLE IF EXISTS installed; DROP TABLE IF EXISTS songs;")
     conn.executescript(SCHEMA)
     _migrate_add_columns(conn)
+    _dedup_album_art_by_url(conn)
     # Ensure default install path setting exists
     if get_setting(conn, "install_path") is None:
         set_setting(conn, "install_path", str(Path(r"C:\Fuser\Fuser\Content\Paks\custom_songs")))
@@ -329,6 +394,30 @@ def get_or_create_album_art(conn: sqlite3.Connection, artist: str, album: str, a
     return conn.execute(
         "SELECT id FROM album_art WHERE artist = ? AND album = ?",
         (artist, album),
+    ).fetchone()[0]
+
+
+def get_or_create_album_art_by_url(conn: sqlite3.Connection, artist: str, art_url: str) -> int:
+    """Return an album_art id for art_url, reusing any existing record that has that URL.
+
+    Avoids creating per-song duplicates when art_url is the album identifier (e.g.
+    scraped MusicBrainz/FSL URLs where the same URL covers multiple tracks).
+    """
+    existing = conn.execute(
+        "SELECT id FROM album_art WHERE art_url = ? LIMIT 1", (art_url,)
+    ).fetchone()
+    if existing:
+        return existing[0]
+    # No record for this URL yet — create one, keying album on the URL itself so
+    # future calls with the same art_url will hit the early-return above.
+    conn.execute(
+        "INSERT OR IGNORE INTO album_art (artist, album, art_url) VALUES (?, ?, ?)",
+        (artist, art_url, art_url),
+    )
+    conn.commit()
+    return conn.execute(
+        "SELECT id FROM album_art WHERE artist = ? AND album = ?",
+        (artist, art_url),
     ).fetchone()[0]
 
 

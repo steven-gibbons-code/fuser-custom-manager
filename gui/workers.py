@@ -5,7 +5,7 @@ import requests
 import queue
 import threading
 
-from db import upsert_songs, ART_DIR, get_or_create_album_art, link_song_album_art
+from db import upsert_songs, ART_DIR, get_or_create_album_art, get_or_create_album_art_by_url, link_song_album_art
 from downloader import download
 from installer import install_pairs
 from sources.fucuco import fetch_all as fetch_fucuco
@@ -121,7 +121,7 @@ class ParallelArtWorker(QThread):
             if self._cancel.is_set():
                 self.finished.emit()
                 return
-            art_id = get_or_create_album_art(conn, r["artist"], r["title"], r["art_url"])
+            art_id = get_or_create_album_art_by_url(conn, r["artist"], r["art_url"])
             link_song_album_art(conn, r["id"], art_id)
 
         rows = conn.execute(
