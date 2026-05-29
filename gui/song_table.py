@@ -15,6 +15,14 @@ class SongTableModel(QAbstractTableModel):
     def get_row(self, index: int) -> dict:
         return self._rows[index]
 
+    def update_song(self, song_id: int, song: dict) -> None:
+        for i, row in enumerate(self._rows):
+            if row.get("id") == song_id:
+                self._rows[i] = song
+                idx = self.index(i, 0)
+                self.dataChanged.emit(idx, idx, [Qt.ItemDataRole.UserRole])
+                return
+
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
         return len(self._rows)
 

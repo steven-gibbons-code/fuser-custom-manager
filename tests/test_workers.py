@@ -197,9 +197,9 @@ def test_single_art_worker_resolves_via_itunes_and_downloads(tmp_path):
         );
         CREATE TABLE songs (
             id INTEGER PRIMARY KEY, artist TEXT, title TEXT,
-            album_art_id INTEGER, source TEXT
+            album_art_id INTEGER, source TEXT, art_url TEXT
         );
-        INSERT INTO songs VALUES (42, 'Daft Punk', 'Get Lucky', NULL, 'fucuco');
+        INSERT INTO songs VALUES (42, 'Daft Punk', 'Get Lucky', NULL, 'fucuco', NULL);
     """)
     song = {"id": 42, "artist": "Daft Punk", "title": "Get Lucky", "album_art_id": None}
     mock_resp = MagicMock()
@@ -317,9 +317,9 @@ def test_parallel_art_worker_resolves_via_itunes_and_downloads(qtbot, tmp_path):
         );
         CREATE TABLE songs (
             id INTEGER PRIMARY KEY, artist TEXT, title TEXT,
-            album_art_id INTEGER, source TEXT
+            album_art_id INTEGER, source TEXT, art_url TEXT
         );
-        INSERT INTO songs VALUES (1, 'Daft Punk', 'Get Lucky', NULL, 'fucuco');
+        INSERT INTO songs VALUES (1, 'Daft Punk', 'Get Lucky', NULL, 'fucuco', NULL);
     """)
 
     mock_resp = MagicMock()
@@ -358,9 +358,9 @@ def test_parallel_art_worker_falls_back_to_gdrive(qtbot, tmp_path):
         );
         CREATE TABLE songs (
             id INTEGER PRIMARY KEY, artist TEXT, title TEXT,
-            album_art_id INTEGER, source TEXT
+            album_art_id INTEGER, source TEXT, art_url TEXT
         );
-        INSERT INTO songs VALUES (1, 'Daft Punk', 'Get Lucky', NULL, 'fucuco');
+        INSERT INTO songs VALUES (1, 'Daft Punk', 'Get Lucky', NULL, 'fucuco', NULL);
     """)
 
     mock_resp = MagicMock()
@@ -397,10 +397,10 @@ def test_parallel_art_worker_emits_finished_with_no_pending(qtbot, tmp_path):
         );
         CREATE TABLE songs (
             id INTEGER PRIMARY KEY, artist TEXT, title TEXT,
-            album_art_id INTEGER, source TEXT
+            album_art_id INTEGER, source TEXT, art_url TEXT
         );
         INSERT INTO album_art VALUES (5, 'Daft Punk', 'RAM', 'http://itunes.com/art.jpg');
-        INSERT INTO songs VALUES (1, 'Daft Punk', 'Get Lucky', 5, 'fucuco');
+        INSERT INTO songs VALUES (1, 'Daft Punk', 'Get Lucky', 5, 'fucuco', NULL);
     """)
     (art_dir / "5.jpg").write_bytes(b"CACHED")
 
@@ -424,9 +424,9 @@ def test_parallel_art_worker_stop_terminates_gracefully(qtbot, tmp_path):
         );
         CREATE TABLE songs (
             id INTEGER PRIMARY KEY, artist TEXT, title TEXT,
-            album_art_id INTEGER, source TEXT
+            album_art_id INTEGER, source TEXT, art_url TEXT
         );
-        INSERT INTO songs VALUES (1, 'Artist A', 'Song X', NULL, 'fucuco');
+        INSERT INTO songs VALUES (1, 'Artist A', 'Song X', NULL, 'fucuco', NULL);
     """)
 
     with patch("gui.workers.ART_DIR", art_dir), \
@@ -459,10 +459,10 @@ def test_parallel_art_worker_skips_existing_file(qtbot, tmp_path):
         );
         CREATE TABLE songs (
             id INTEGER PRIMARY KEY, artist TEXT, title TEXT,
-            album_art_id INTEGER, source TEXT
+            album_art_id INTEGER, source TEXT, art_url TEXT
         );
         INSERT INTO album_art VALUES (3, 'Artist C', 'Album C', 'http://ex.com/3.jpg');
-        INSERT INTO songs VALUES (2, 'Artist C', 'Song Z', 3, 'fucuco');
+        INSERT INTO songs VALUES (2, 'Artist C', 'Song Z', 3, 'fucuco', NULL);
     """)
 
     received = []
@@ -475,3 +475,46 @@ def test_parallel_art_worker_skips_existing_file(qtbot, tmp_path):
         mock_get.assert_not_called()
 
     assert 2 in received
+
+
+def test_parallel_art_worker_handles_fusersoundlab_art_url(qtbot, tmp_path):
+    """FSL songs with art_url skip iTunes resolve and go straight to download."""
+    import sqlite3
+    from gui.workers import ParallelArtWorker
+
+    art_dir = tmp_path / "art"
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.executescript("""
+        CREATE TABLE album_art (
+            id INTEGER PRIMARY KEY, artist TEXT NOT NULL, album TEXT NOT NULL,
+            art_url TEXT, UNIQUE(artist, album)
+        );
+        CREATE TABLE songs (
+            id INTEGER PRIMARY KEY, artist TEXT, title TEXT,
+            album_art_id INTEGER, source TEXT, art_url TEXT
+        );
+        INSERT INTO songs VALUES (10, 'FSL Artist', 'FSL Song', NULL, 'fusersoundlab',
+                                  'http://fsl.com/poster.jpg');
+    """)
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.content = b"FSLIMAGE"
+    received = []
+
+    from db import get_or_create_album_art as _real_goca, link_song_album_art as _real_link
+    with patch("gui.workers.ART_DIR", art_dir), \
+         patch("gui.workers.itunes_lookup") as mock_itunes, \
+         patch("gui.workers.requests.get", return_value=mock_resp), \
+         patch("gui.workers.get_or_create_album_art", wraps=_real_goca) as mock_create, \
+         patch("gui.workers.link_song_album_art", wraps=_real_link) as mock_link:
+        worker = ParallelArtWorker(conn, n_resolve=1, n_download=1)
+        worker.art_ready.connect(lambda sid: received.append(sid))
+        with qtbot.waitSignal(worker.finished, timeout=5000):
+            worker.start()
+
+    mock_itunes.assert_not_called()
+    mock_create.assert_called_once_with(conn, "FSL Artist", "FSL Song", "http://fsl.com/poster.jpg")
+    assert mock_link.call_count >= 1
+    assert 10 in received

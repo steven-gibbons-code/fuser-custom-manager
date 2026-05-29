@@ -187,17 +187,20 @@ def upsert_songs(conn: sqlite3.Connection, songs: list[dict]) -> None:
         s.setdefault("disc4", None)
         s.setdefault("download_type", None)
         s.setdefault("submit_date", None)
+        s.setdefault("art_url", None)
         s["quality"] = derive_quality(s)
         enriched.append(s)
     conn.executemany("""
         INSERT INTO songs (source, artist, title, creator, genre, year, bpm, key,
                            de_status, complete, complete_notes, stream_opt, origin,
                            link, link_host, last_seen,
-                           disc1, disc2, disc3, disc4, download_type, quality, submit_date)
+                           disc1, disc2, disc3, disc4, download_type, quality, submit_date,
+                           art_url)
         VALUES (:source, :artist, :title, :creator, :genre, :year, :bpm, :key,
                 :de_status, :complete, :complete_notes, :stream_opt, :origin,
                 :link, :link_host, :last_seen,
-                :disc1, :disc2, :disc3, :disc4, :download_type, :quality, :submit_date)
+                :disc1, :disc2, :disc3, :disc4, :download_type, :quality, :submit_date,
+                :art_url)
         ON CONFLICT(source, link) DO UPDATE SET
             artist=excluded.artist, title=excluded.title,
             creator=excluded.creator, genre=excluded.genre, year=excluded.year,
@@ -208,7 +211,8 @@ def upsert_songs(conn: sqlite3.Connection, songs: list[dict]) -> None:
             disc1=excluded.disc1, disc2=excluded.disc2,
             disc3=excluded.disc3, disc4=excluded.disc4,
             download_type=excluded.download_type, quality=excluded.quality,
-            submit_date=COALESCE(excluded.submit_date, submit_date)
+            submit_date=COALESCE(excluded.submit_date, submit_date),
+            art_url=COALESCE(excluded.art_url, art_url)
     """, enriched)
     conn.commit()
 
@@ -343,5 +347,6 @@ def get_songs_pending_art(conn: sqlite3.Connection) -> list[dict]:
 
 def count_pending_art(conn: sqlite3.Connection) -> int:
     return conn.execute(
-        "SELECT COUNT(*) FROM songs WHERE album_art_id IS NULL AND source != 'fusersoundlab'"
+        "SELECT COUNT(*) FROM songs WHERE album_art_id IS NULL "
+        "AND (source != 'fusersoundlab' OR art_url IS NOT NULL)"
     ).fetchone()[0]

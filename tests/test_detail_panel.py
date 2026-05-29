@@ -169,7 +169,8 @@ def test_clear_resets_all_pills(qtbot):
 
 # ── Art overlay button ─────────────────────────────────────────────────────
 
-_SONG_NO_ART = {"id": 42, "pak_path": None}
+_SONG_NO_ART = {"id": 42, "album_art_id": None, "pak_path": None}
+_SONG_WITH_ART = {"id": 42, "album_art_id": 7, "pak_path": None}
 
 
 def test_overlay_visible_when_no_art_on_disk(qtbot, tmp_path):
@@ -184,12 +185,23 @@ def test_overlay_visible_when_no_art_on_disk(qtbot, tmp_path):
 def test_overlay_hidden_when_art_on_disk(qtbot, tmp_path):
     art_dir = tmp_path / "art"
     art_dir.mkdir()
-    (art_dir / "42.jpg").write_bytes(b"FAKE")
+    (art_dir / "7.jpg").write_bytes(b"FAKE")  # keyed by album_art_id
     with patch("gui.detail_panel.ART_DIR", art_dir):
         panel = DetailPanel()
         qtbot.addWidget(panel)
-        panel.show(_SONG_NO_ART)
-    assert not panel._art_overlay_btn.isVisible()
+        panel.show(_SONG_WITH_ART)
+        assert panel._art_overlay_btn.isHidden()
+
+
+def test_overlay_visible_when_album_art_id_present_but_file_missing(qtbot, tmp_path):
+    art_dir = tmp_path / "art"
+    art_dir.mkdir()
+    # album_art_id is set but file not downloaded yet
+    with patch("gui.detail_panel.ART_DIR", art_dir):
+        panel = DetailPanel()
+        qtbot.addWidget(panel)
+        panel.show(_SONG_WITH_ART)
+        assert not panel._art_overlay_btn.isHidden()
 
 
 def test_overlay_hidden_on_clear(qtbot, tmp_path):
@@ -199,7 +211,7 @@ def test_overlay_hidden_on_clear(qtbot, tmp_path):
         qtbot.addWidget(panel)
         panel.show(_SONG_NO_ART)
         panel.clear()
-    assert not panel._art_overlay_btn.isVisible()
+        assert panel._art_overlay_btn.isHidden()
 
 
 def test_fetch_art_requested_emitted_on_click(qtbot, tmp_path):

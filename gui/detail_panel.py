@@ -62,13 +62,13 @@ class DetailPanel(QScrollArea):
 
         # ── Album art ──────────────────────────────────────────────
         self._art_lbl = QLabel()
-        self._art_lbl.setFixedSize(160, 160)
+        self._art_lbl.setFixedSize(240, 240)
         self._art_lbl.setStyleSheet("border-radius: 14px; background: transparent;")
-        self._art_lbl.setPixmap(_art_pixmap({}, size=160))
+        self._art_lbl.setPixmap(_art_pixmap({}, size=240))
         layout.addWidget(self._art_lbl)
 
         self._art_overlay_btn = QPushButton("↓", self._art_lbl)
-        self._art_overlay_btn.setGeometry(58, 58, 44, 44)
+        self._art_overlay_btn.setGeometry(98, 98, 44, 44)
         self._art_overlay_btn.setStyleSheet(
             "background: rgba(0,0,0,0.55); color: white; border-radius: 22px; "
             "font-size: 20px; border: none;"
@@ -77,7 +77,7 @@ class DetailPanel(QScrollArea):
         self._art_overlay_btn.hide()
 
         self._art_spinner_lbl = QLabel("⠋", self._art_lbl)
-        self._art_spinner_lbl.setGeometry(58, 58, 44, 44)
+        self._art_spinner_lbl.setGeometry(98, 98, 44, 44)
         self._art_spinner_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._art_spinner_lbl.setStyleSheet(
             "background: rgba(0,0,0,0.55); color: white; border-radius: 22px; font-size: 16px;"
@@ -240,7 +240,8 @@ class DetailPanel(QScrollArea):
             self._art_spinner_lbl.hide()
             self._spinner_timer.stop()
             return
-        has_art = (ART_DIR / f"{self._song['id']}.jpg").exists()
+        album_art_id = self._song.get("album_art_id")
+        has_art = album_art_id is not None and (ART_DIR / f"{album_art_id}.jpg").exists()
         self._art_overlay_btn.setVisible(not has_art)
         self._art_spinner_lbl.hide()
         self._spinner_timer.stop()
@@ -261,7 +262,7 @@ class DetailPanel(QScrollArea):
         self._song = song
         self._manual_lbl.setText("")
 
-        self._art_lbl.setPixmap(_art_pixmap(song, size=160))
+        self._art_lbl.setPixmap(_art_pixmap(song, size=240))
         self._title_lbl.setText(song.get("title", "—"))
         self._artist_lbl.setText(song.get("artist", "—"))
 
@@ -304,7 +305,7 @@ class DetailPanel(QScrollArea):
 
     def clear(self):
         self._song = None
-        self._art_lbl.setPixmap(_art_pixmap({}, size=160))
+        self._art_lbl.setPixmap(_art_pixmap({}, size=240))
         self._title_lbl.setText("—")
         self._artist_lbl.setText("—")
         self._quality_pill.setText("—")

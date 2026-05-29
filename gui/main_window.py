@@ -119,6 +119,14 @@ class FuserApp(QMainWindow):
         if hasattr(self, "_backdrop"):
             self._backdrop.resize(self.centralWidget().size())
 
+    def closeEvent(self, event):
+        for worker in (self._art_worker, self._single_art_worker, self._active_worker):
+            if worker is not None and worker.isRunning():
+                if hasattr(worker, "stop"):
+                    worker.stop()
+                worker.wait(3000)
+        event.accept()
+
     def _build_batch_bar(self) -> QFrame:
         bar = QFrame()
         bar.setObjectName("batchbar")
@@ -269,14 +277,18 @@ class FuserApp(QMainWindow):
 
     def _start_art_resolve(self):
         self._set_action_buttons_enabled(False)
+        self._fetch_art_btn.setEnabled(True)  # re-enable as stop button
+        self._fetch_art_btn.setText("✕ Stop Fetch")
+        self._fetch_art_btn.clicked.disconnect(self._start_art_resolve)
+        self._fetch_art_btn.clicked.connect(self._cancel_art_resolve)
+
         pending = count_pending_art(self.conn)
         self.status_bar.start_art_resolve(pending)
         worker = ParallelArtWorker(self.conn)
         worker.status.connect(self.status_bar.set_message)
         worker.progress.connect(self.status_bar.set_progress)
         worker.art_ready.connect(self._on_art_ready)
-        worker.finished.connect(self.status_bar.set_idle)
-        worker.finished.connect(lambda: self._set_action_buttons_enabled(True))
+        worker.finished.connect(self._on_art_resolve_done)
         self.song_table.visibleSongsChanged.connect(worker.prioritize)
         worker.finished.connect(
             lambda: self.song_table.visibleSongsChanged.disconnect(worker.prioritize)
@@ -285,13 +297,34 @@ class FuserApp(QMainWindow):
         worker.start()
         self.song_table.emit_visible_songs()
 
+    def _cancel_art_resolve(self):
+        if self._art_worker:
+            self._art_worker.stop()
+        self._fetch_art_btn.setEnabled(False)
+        self._fetch_art_btn.setText("Stopping…")
+        self.status_bar.set_message("Stopping art fetch…")
+
+    def _on_art_resolve_done(self):
+        self._art_worker = None
+        self._fetch_art_btn.setText("↓ Fetch Art")
+        try:
+            self._fetch_art_btn.clicked.disconnect(self._cancel_art_resolve)
+        except RuntimeError:
+            pass
+        self._fetch_art_btn.clicked.connect(self._start_art_resolve)
+        self._set_action_buttons_enabled(True)
+        self.status_bar.set_idle()
+
     def _on_art_ready(self, song_id: int):
         QPixmapCache.remove(f"art_{song_id}_48")
-        QPixmapCache.remove(f"art_{song_id}_160")
+        QPixmapCache.remove(f"art_{song_id}_240")
+        refreshed = get_song_by_id(self.conn, song_id)
+        if refreshed:
+            self.song_table.model().update_song(song_id, refreshed)
         self.song_table.viewport().update()
         if (self.detail_panel._song
                 and self.detail_panel._song.get("id") == song_id):
-            self.detail_panel.show(self.detail_panel._song)
+            self.detail_panel.show(refreshed or self.detail_panel._song)
 
     def _fetch_art_for_song(self, song: dict):
         worker = SingleArtWorker(song, self.conn)

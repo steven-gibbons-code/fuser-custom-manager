@@ -108,13 +108,29 @@ class ParallelArtWorker(QThread):
         ART_DIR.mkdir(parents=True, exist_ok=True)
         self.status.emit("Resolving art…")
 
-        rows = self._conn.execute(
+        conn = self._conn
+
+        # Any song that already has art_url (FSL poster field, fucuco scraped URLs, etc.)
+        # doesn't need an iTunes lookup — create album_art records and link them now so
+        # they fall into the normal pending_download path below.
+        direct_rows = conn.execute(
+            "SELECT id, artist, title, art_url FROM songs "
+            "WHERE album_art_id IS NULL AND art_url IS NOT NULL"
+        ).fetchall()
+        for r in direct_rows:
+            if self._cancel.is_set():
+                self.finished.emit()
+                return
+            art_id = get_or_create_album_art(conn, r["artist"], r["title"], r["art_url"])
+            link_song_album_art(conn, r["id"], art_id)
+
+        rows = conn.execute(
             "SELECT id, artist, title FROM songs "
-            "WHERE album_art_id IS NULL AND source != 'fusersoundlab'"
+            "WHERE album_art_id IS NULL AND art_url IS NULL AND source != 'fusersoundlab'"
         ).fetchall()
         pending_resolve = [dict(r) for r in rows]
 
-        rows2 = self._conn.execute(
+        rows2 = conn.execute(
             "SELECT s.id, s.album_art_id, a.art_url FROM songs s "
             "JOIN album_art a ON a.id = s.album_art_id "
             "WHERE s.album_art_id IS NOT NULL"
